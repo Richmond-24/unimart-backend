@@ -1,0 +1,73 @@
+// backend/lib/mongodb.ts
+import mongoose from 'mongoose';
+
+// Get MongoDB URI from environment variables
+const MONGODB_URI = process.env.MONGODB_URI;
+
+if (!MONGODB_URI) {
+  throw new Error(
+    'Please define the MONGODB_URI environment variable inside .env.local'
+  );
+}
+
+// Simple cache for development
+let cached = (global as any).mongoose;
+
+if (!cached) {
+  cached = (global as any).mongoose = { conn: null, promise: null };
+}
+
+export async function connectToDatabase() {
+  // If connection exists, return it
+  if (cached.conn) {
+    console.log('📦 Using cached MongoDB connection');
+    return cached.conn;
+  }
+
+  // If no connection promise exists, create one
+  if (!cached.promise) {
+    console.log('🔌 Creating new MongoDB connection...');
+    
+    // Simple connection options
+    const opts = {
+      bufferCommands: false,
+      maxPoolSize: 10,
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+    };
+
+    cached.promise = mongoose.connect(MONGODB_URI, opts).then((mongoose) => {
+      console.log('✅ MongoDB connected successfully');
+      return mongoose;
+    }).catch((error) => {
+      console.error('❌ MongoDB connection error:', error);
+      cached.promise = null;
+      throw error;
+    });
+  }
+
+  try {
+    cached.conn = await cached.promise;
+  } catch (e) {
+    cached.promise = null;
+    throw e;
+  }
+
+  return cached.conn;
+}
+
+// Helper to check connection status
+export async function checkConnection() {
+  try {
+    await connectToDatabase();
+    return {
+      connected: mongoose.connection.readyState === 1,
+      state: ['disconnected', 'connected', 'connecting', 'disconnecting'][mongoose.connection.readyState] || 'unknown'
+    };
+  } catch (error) {
+    return {
+      connected: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    };
+  }
+}
