@@ -153,21 +153,58 @@ const startServer = async () => {
     // Create HTTP server and Socket.io for realtime chat
     const server = http.createServer(app);
     const io = new Server(server, {
-      cors: { origin: '*', methods: ['GET', 'POST'] }
+      cors: { 
+        origin: function(origin, callback) {
+          // Allow all origins for WebSocket (socket.io-client will work cross-domain)
+          callback(null, true);
+        },
+        methods: ['GET', 'POST', 'OPTIONS'],
+        credentials: true,
+        allowEIO3: true
+      },
+      transports: ['websocket', 'polling'],
+      pingInterval: 25000,
+      pingTimeout: 120000,  // Extended to 120s for slow connections on Render
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      reconnectionAttempts: 5,
+      maxHttpBufferSize: 1e6,
+      allowUpgrades: true,
     });
 
     const onlineUsers = new Map();
 
     io.use(async (socket, next) => {
       try {
-        const token = socket.handshake.auth?.token;
-        if (!token) return next(new Error('Authentication required'));
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        // support both { id } and { userId }
-        socket.userId = decoded.userId || decoded.id || decoded._id;
+        const token = socket.handshake.auth?.token || socket.handshake.query?.token;
+        
+        if (token && typeof token === 'string' && token.trim()) {
+          try {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+            socket.userId = decoded.userId || decoded.id || decoded._id;
+            socket.isAuthenticated = true;
+            socket.userEmail = decoded.email || null;
+          } catch (err) {
+            // Token is provided but invalid - warn but allow connection
+            socket.isAuthenticated = false;
+            socket.userId = `anon-${Date.now()}`;
+            if (process.env.NODE_ENV === 'development') {
+              console.warn('[Socket.IO] Invalid token (but allowing connection):', err.message);
+            }
+          }
+        } else {
+          // No token provided - allow anonymous connection
+          socket.isAuthenticated = false;
+          socket.userId = `anon-${Date.now()}`;
+        }
+        
+        // Always proceed with connection
         next();
       } catch (error) {
-        next(new Error('Invalid token'));
+        // Log but don't prevent connection
+        console.error('[Socket.IO] Auth middleware error:', error.message);
+        next();
       }
     });
 

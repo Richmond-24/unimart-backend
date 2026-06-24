@@ -1,0 +1,47 @@
+{
+  "name": "unimart-backend",
+  "version": "1.0.0",
+  "description": "UniMart Campus Marketplace API - Production Ready",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "start:render": "node src/server-render-production.js",
+    "dev": "nodemon src/server.js",
+    "test": "echo 'Tests not configured'",
+    "seed": "node src/utils/seed.js || echo 'Seed script not found'",
+    "health": "curl http://localhost:5000/health || echo 'Server not running'"
+  },
+  "keywords": [
+    "marketplace",
+    "campus",
+    "ecommerce",
+    "api"
+  ],
+  "author": "UniMart Team",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.13.6",
+    "bcrypt": "^6.0.0",
+    "bcryptjs": "^2.4.3",
+    "cloudinary": "^1.41.3",
+    "cors": "^2.8.6",
+    "dotenv": "^16.6.1",
+    "express": "^4.22.1",
+    "express-rate-limit": "^7.2.0",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.1.2",
+    "mongoose": "^8.1.1",
+    "morgan": "^1.10.0",
+    "multer": "^1.4.5",
+    "socket.io": "^4.7.2",
+    "socket.io-client": "^4.7.2",
+    "node-fetch": "^2.7.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  }
+}
