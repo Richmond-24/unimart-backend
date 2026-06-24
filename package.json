@@ -5,6 +5,7 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
+    "start:prod": "NODE_ENV=production node src/server.js",
     "dev": "nodemon src/server.js",
     "seed": "node src/utils/seed.js",
     "init-ratings": "node src/utils/init-default-ratings.js"
@@ -30,6 +31,7 @@
     "nodemailer": "^8.0.4",
     "openai": "^4.104.0",
     "socket.io": "^4.8.3",
+    "socket.io-client": "^4.8.3",
     "stream-chat": "^9.40.0",
     "uuid": "^13.0.0"
   },
