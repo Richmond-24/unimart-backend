@@ -12,13 +12,23 @@ const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
 const app = express();
-const PORT = parseInt(process.env.PORT, 10) || 5000;
+const PORT = Number(process.env.PORT || 5000);
 const NODE_ENV = process.env.NODE_ENV || 'production';
 const MONGO_URI = (process.env.MONGO_URI || 'mongodb://localhost:27017/unimart').trim();
 const JWT_SECRET = (process.env.JWT_SECRET || 'unimart-secret-key').trim();
-const FRONTEND_URL = (process.env.FRONTEND_URL || 'https://unimart.app,http://localhost:3000').trim();
+const FRONTEND_URL = (process.env.FRONTEND_URL || 'https://unimart-app-kappa.vercel.app').trim();
 
-const allowedOrigins = FRONTEND_URL.split(',').map((item) => item.trim()).filter(Boolean);
+const allowedOrigins = [FRONTEND_URL]
+  .filter(Boolean)
+  .map((origin) => origin.replace(/\/+$/, ''));
+
+const onrenderOriginPattern = /^https?:\/\/([a-z0-9-]+\.)*onrender\.com$/i;
+
+function isOriginAllowed(origin) {
+  if (!origin) return true;
+  const normalized = origin.trim().replace(/\/+$/, '');
+  return allowedOrigins.includes(normalized) || onrenderOriginPattern.test(normalized);
+}
 
 console.log('[server] Starting UniMart Backend');
 console.log('[server] NODE_ENV:', NODE_ENV);
@@ -30,17 +40,17 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+  origin: (origin, callback) => {
+    if (!origin || isOriginAllowed(origin)) {
       return callback(null, true);
     }
-    return callback(new Error(`CORS policy: Origin ${origin} not allowed`));
+    return callback(new Error(`CORS policy blocked: ${origin}`));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  optionsSuccessStatus: 200
+  optionsSuccessStatus: 200,
+  preflightContinue: false,
 }));
 
 if (NODE_ENV === 'development') {
@@ -53,9 +63,9 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: parseInt(process.env.AUTH_RATE_LIMIT_MAX || '10', 10),
+  max: Number(process.env.AUTH_RATE_LIMIT_MAX || '10'),
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
 });
 
 app.get('/health', (req, res) => {
@@ -64,7 +74,7 @@ app.get('/health', (req, res) => {
     status: 'OK',
     environment: NODE_ENV,
     timestamp: new Date().toISOString(),
-    socketConnections: app.get('io') ? app.get('io').engine.clientsCount : 0
+    socketConnections: app.get('io') ? app.get('io').engine.clientsCount : 0,
   });
 });
 
@@ -73,7 +83,7 @@ app.get('/socket-status', (req, res) => {
   res.status(200).json({
     success: true,
     socketConnections: io ? io.engine.clientsCount : 0,
-    path: '/socket.io'
+    path: '/socket.io',
   });
 });
 
@@ -82,7 +92,7 @@ app.get('/', (req, res) => {
     success: true,
     message: 'UniMart Backend is running',
     version: '1.0.0',
-    docs: '/health'
+    docs: '/health',
   });
 });
 
@@ -119,7 +129,7 @@ app.use((req, res) => {
   res.status(404).json({
     success: false,
     message: `Route ${req.originalUrl} not found`,
-    method: req.method
+    method: req.method,
   });
 });
 
@@ -130,7 +140,7 @@ app.use((err, req, res, next) => {
   res.status(status).json({
     success: false,
     message,
-    ...(NODE_ENV === 'development' ? { stack: err.stack } : {})
+    ...(NODE_ENV === 'development' ? { stack: err.stack } : {}),
   });
 });
 
@@ -139,26 +149,32 @@ const startServer = async () => {
     console.log('[server] Connecting to MongoDB...');
     await mongoose.connect(MONGO_URI, {
       useNewUrlParser: true,
-      useUnifiedTopology: true
+      useUnifiedTopology: true,
     });
     console.log('[server] MongoDB connected');
 
     const server = http.createServer(app);
     const io = new Server(server, {
       cors: {
-        origin: (origin, callback) => callback(null, true),
+        origin: (origin, callback) => {
+          if (!origin || isOriginAllowed(origin)) {
+            return callback(null, true);
+          }
+          return callback(new Error(`Socket.IO CORS blocked: ${origin}`));
+        },
         credentials: true,
         methods: ['GET', 'POST', 'OPTIONS'],
-        allowedHeaders: ['Content-Type', 'Authorization']
+        allowedHeaders: ['Content-Type', 'Authorization'],
       },
       path: '/socket.io',
       transports: ['websocket', 'polling'],
       allowEIO3: true,
-      pingInterval: 25000,
-      pingTimeout: 120000,
-      connectTimeout: 45000,
+      pingInterval: 30000,
+      pingTimeout: 30000,
+      connectTimeout: 30000,
+      timeout: 30000,
       maxHttpBufferSize: 1e6,
-      allowUpgrades: true
+      allowUpgrades: true,
     });
 
     io.use((socket, next) => {
@@ -184,6 +200,8 @@ const startServer = async () => {
       console.log('[socket] connected', socket.id, 'user', socket.userId);
       socket.join(`user:${socket.userId}`);
 
+      socket.emit('server:connected', { timestamp: new Date().toISOString(), socketId: socket.id });
+
       socket.on('message', (payload) => {
         console.log('[socket] message', payload);
         io.emit('message', { from: socket.id, payload, timestamp: new Date().toISOString() });
@@ -207,12 +225,12 @@ const startServer = async () => {
     server.listen(PORT, '0.0.0.0', () => {
       console.log('=============================================');
       console.log(`🚀 UniMart Backend running on port ${PORT}`);
-      console.log('📡 Socket.IO path: wss://unimart.app/socket.io');
+      console.log('📡 Socket.IO path: wss://unimart-backends-2.onrender.com/socket.io');
       console.log(`🌍 Health check: http://localhost:${PORT}/health`);
       console.log('=============================================');
     });
   } catch (error) {
-    console.error('[server] Startup error:', error.message);
+    console.error('[server] Startup error:', error);
     process.exit(1);
   }
 };
