@@ -44,7 +44,7 @@ npm run seed
 
 # 4. Start development server
 npm run dev
-# → API running at http://localhost:5000
+# → API running at https://unimart-backends.onrender.com
 ```
 
 ---

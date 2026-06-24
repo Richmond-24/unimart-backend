@@ -342,17 +342,17 @@ Using cURL or Postman:
 
 ```bash
 # Register
-curl -X POST http://localhost:5000/api/auth/register \
+curl -X POST https://unimart-backends.onrender.com/api/auth/register \
   -H "Content-Type: application/json" \
   -d '{"firstName":"Test","lastName":"User","email":"test@example.com","password":"Test123456","passwordConfirm":"Test123456"}'
 
 # Login
-curl -X POST http://localhost:5000/api/auth/login \
+curl -X POST https://unimart-backends.onrender.com/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"test@example.com","password":"Test123456"}'
 
 # Get Profile
-curl -X GET http://localhost:5000/api/auth/me \
+curl -X GET https://unimart-backends.onrender.com/api/auth/me \
   -H "Authorization: Bearer YOUR_TOKEN_HERE"
 ```
 

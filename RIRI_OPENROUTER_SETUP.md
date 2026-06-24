@@ -7,8 +7,8 @@
 
 /**
  * 1. INSTALL DEPENDENCIES
- * 
- * npm install axios dotenv
+
+curl -X POST https://unimart-backends.onrender.com/api/riri/chat \
  * 
  * (should already be installed in your project)
  */
@@ -173,7 +173,7 @@
 /**
  * CURL Example:
  * 
- * curl -X POST http://localhost:5000/api/riri/chat \
+ * curl -X POST https://unimart-backends.onrender.com/api/riri/chat \
  *   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
  *   -H "Content-Type: application/json" \
  *   -d '{
