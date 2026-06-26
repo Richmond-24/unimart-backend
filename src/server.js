@@ -18,7 +18,11 @@ const MONGO_URI = (process.env.MONGO_URI || 'mongodb://localhost:27017/unimart')
 const JWT_SECRET = (process.env.JWT_SECRET || 'unimart-secret-key').trim();
 const FRONTEND_URL = (process.env.FRONTEND_URL || 'https://unimart-app-kappa.vercel.app').trim();
 
-const allowedOrigins = [FRONTEND_URL]
+const allowedOrigins = [
+  FRONTEND_URL,
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+]
   .filter(Boolean)
   .map((origin) => origin.replace(/\/+$/, ''));
 
@@ -32,14 +36,14 @@ function isOriginAllowed(origin) {
 
 console.log('[server] Starting UniMart Backend');
 console.log('[server] NODE_ENV:', NODE_ENV);
-console.log('[server] FRONTEND_URL:', allowedOrigins);
+console.log('[server] FRONTEND_URLS:', allowedOrigins);
 console.log('[server] PORT:', PORT);
 
 app.use(helmet());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-app.use(cors({
+const corsOptions = {
   origin: (origin, callback) => {
     if (!origin || isOriginAllowed(origin)) {
       return callback(null, true);
@@ -51,7 +55,10 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   optionsSuccessStatus: 200,
   preflightContinue: false,
-}));
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
 if (NODE_ENV === 'development') {
   app.use(morgan('dev'));
@@ -154,6 +161,10 @@ const startServer = async () => {
     console.log('[server] MongoDB connected');
 
     const server = http.createServer(app);
+    server.keepAliveTimeout = 65000;
+    server.headersTimeout = 120000;
+    server.setTimeout(120000);
+
     const io = new Server(server, {
       cors: {
         origin: (origin, callback) => {
@@ -164,15 +175,15 @@ const startServer = async () => {
         },
         credentials: true,
         methods: ['GET', 'POST', 'OPTIONS'],
-        allowedHeaders: ['Content-Type', 'Authorization'],
+        allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
       },
       path: '/socket.io',
       transports: ['websocket', 'polling'],
       allowEIO3: true,
-      pingInterval: 30000,
-      pingTimeout: 30000,
-      connectTimeout: 30000,
-      timeout: 30000,
+      pingInterval: 25000,
+      pingTimeout: 60000,
+      connectTimeout: 45000,
+      timeout: 60000,
       maxHttpBufferSize: 1e6,
       allowUpgrades: true,
     });
@@ -187,7 +198,7 @@ const startServer = async () => {
         } catch (err) {
           socket.userId = `anon-${Date.now()}`;
           socket.isAuthenticated = false;
-          console.warn('[socket] Invalid token, allowing anonymous connection');
+          console.warn('[socket] Invalid token received during handshake');
         }
       } else {
         socket.userId = `anon-${Date.now()}`;
@@ -197,35 +208,62 @@ const startServer = async () => {
     });
 
     io.on('connection', (socket) => {
-      console.log('[socket] connected', socket.id, 'user', socket.userId);
+      const origin = socket.handshake.headers.origin || socket.request.headers.origin || 'unknown';
+      const transportName = socket.conn.transport.name;
+      console.log('[socket] connected', {
+        socketId: socket.id,
+        userId: socket.userId,
+        authenticated: socket.isAuthenticated,
+        transport: transportName,
+        origin,
+        time: new Date().toISOString(),
+      });
+
       socket.join(`user:${socket.userId}`);
 
-      socket.emit('server:connected', { timestamp: new Date().toISOString(), socketId: socket.id });
+      socket.emit('server:connected', {
+        timestamp: new Date().toISOString(),
+        socketId: socket.id,
+        transport: transportName,
+      });
+
+      socket.on('health:ping', () => {
+        socket.emit('health:pong', {
+          timestamp: new Date().toISOString(),
+          socketId: socket.id,
+          origin,
+        });
+      });
 
       socket.on('message', (payload) => {
-        console.log('[socket] message', payload);
+        console.log('[socket] message', { socketId: socket.id, payload });
         io.emit('message', { from: socket.id, payload, timestamp: new Date().toISOString() });
       });
 
-      socket.on('ping', () => {
-        socket.emit('pong', { timestamp: new Date().toISOString() });
-      });
-
       socket.on('disconnect', (reason) => {
-        console.log('[socket] disconnected', socket.id, reason);
+        console.log('[socket] disconnected', { socketId: socket.id, reason });
       });
 
       socket.on('connect_error', (err) => {
-        console.error('[socket] connect_error', err.message || err);
+        console.error('[socket] connect_error', err?.message || err);
+      });
+
+      socket.on('error', (err) => {
+        console.error('[socket] error', err?.message || err);
       });
     });
 
+    io.engine.on('connection_error', (error) => {
+      console.warn('[socket] engine connection_error', error.message || error);
+    });
+
     app.set('io', io);
+    app.locals.io = io;
 
     server.listen(PORT, '0.0.0.0', () => {
       console.log('=============================================');
       console.log(`🚀 UniMart Backend running on port ${PORT}`);
-      console.log('📡 Socket.IO path: wss://unimart-backends-2.onrender.com/socket.io');
+      console.log('📡 Socket.IO path: https://unimart-backends-2.onrender.com/socket.io');
       console.log(`🌍 Health check: http://localhost:${PORT}/health`);
       console.log('=============================================');
     });

@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: unimart-backend
+    env: node
+    plan: starter
+    region: oregon
+    branch: main
+    buildCommand: npm install
+    startCommand: npm run start:render
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: FRONTEND_URL
+        value: https://unimart-app-kappa.vercel.app
