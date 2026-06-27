@@ -1,15 +1,16 @@
 const path = require('path');
 const express = require('express');
-const mongoose = require('mongoose');
 const cors = require('cors');
+const http = require('http');
+const { Server } = require('socket.io');
+const dotenv = require('dotenv');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
-const http = require('http');
-const { Server } = require('socket.io');
+const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 
-require('dotenv').config();
+dotenv.config();
 
 const app = express();
 const PORT = Number(process.env.PORT || 5000);
@@ -18,26 +19,21 @@ const MONGO_URI = (process.env.MONGO_URI || 'mongodb://localhost:27017/unimart')
 const JWT_SECRET = (process.env.JWT_SECRET || 'unimart-secret-key').trim();
 const FRONTEND_URL = (process.env.FRONTEND_URL || 'https://unimart-app-kappa.vercel.app').trim();
 
-const allowedOrigins = [
-  FRONTEND_URL,
-  'http://localhost:3000',
-  'http://127.0.0.1:3000',
-]
+const allowedOrigins = FRONTEND_URL.split(',')
+  .map((origin) => origin.trim().replace(/\/+$|\s+/g, ''))
   .filter(Boolean)
-  .map((origin) => origin.replace(/\/+$/, ''));
+  .concat(['http://localhost:3000', 'http://127.0.0.1:3000']);
 
-const onrenderOriginPattern = /^https?:\/\/([a-z0-9-]+\.)*onrender\.com$/i;
-
-function isOriginAllowed(origin) {
+const isOriginAllowed = (origin) => {
   if (!origin) return true;
   const normalized = origin.trim().replace(/\/+$/, '');
-  return allowedOrigins.includes(normalized) || onrenderOriginPattern.test(normalized);
-}
+  return allowedOrigins.includes(normalized);
+};
 
-console.log('[server] Starting UniMart Backend');
 console.log('[server] NODE_ENV:', NODE_ENV);
-console.log('[server] FRONTEND_URLS:', allowedOrigins);
 console.log('[server] PORT:', PORT);
+console.log('[server] FRONTEND_URL:', FRONTEND_URL);
+console.log('[server] allowedOrigins:', allowedOrigins);
 
 app.use(helmet());
 app.use(express.json({ limit: '10mb' }));
@@ -48,13 +44,13 @@ const corsOptions = {
     if (!origin || isOriginAllowed(origin)) {
       return callback(null, true);
     }
-    return callback(new Error(`CORS policy blocked: ${origin}`));
+    return callback(new Error(`CORS policy blocked origin: ${origin}`));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  optionsSuccessStatus: 200,
   preflightContinue: false,
+  optionsSuccessStatus: 200,
 };
 
 app.use(cors(corsOptions));
@@ -68,29 +64,14 @@ if (NODE_ENV === 'development') {
 
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: Number(process.env.AUTH_RATE_LIMIT_MAX || '10'),
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
 app.get('/health', (req, res) => {
+  const io = app.get('io');
   res.status(200).json({
     success: true,
     status: 'OK',
     environment: NODE_ENV,
     timestamp: new Date().toISOString(),
-    socketConnections: app.get('io') ? app.get('io').engine.clientsCount : 0,
-  });
-});
-
-app.get('/socket-status', (req, res) => {
-  const io = app.get('io');
-  res.status(200).json({
-    success: true,
     socketConnections: io ? io.engine.clientsCount : 0,
-    path: '/socket.io',
   });
 });
 
@@ -98,13 +79,17 @@ app.get('/', (req, res) => {
   res.status(200).json({
     success: true,
     message: 'UniMart Backend is running',
-    version: '1.0.0',
     docs: '/health',
   });
 });
 
 try {
-  app.use('/api/auth', authLimiter, require('./routes/auth.routes.js'));
+  app.use('/api/auth', rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: Number(process.env.AUTH_RATE_LIMIT_MAX || '10'),
+    standardHeaders: true,
+    legacyHeaders: false,
+  }), require('./routes/auth.routes.js'));
   app.use('/api/users', require('./routes/user.routes.js'));
   app.use('/api/products', require('./routes/product.routes.js'));
   app.use('/api/conversations', require('./routes/conversations.js'));
@@ -129,7 +114,7 @@ try {
   app.use('/api/product-notifications', require('./routes/productNotifications.js'));
   app.use('/api/webhooks', require('./routes/webhooks.routes.js'));
 } catch (routeError) {
-  console.warn('[server] Route module load warning:', routeError.message);
+  console.warn('[server] route registration warning:', routeError.message);
 }
 
 app.use((req, res) => {
@@ -141,7 +126,7 @@ app.use((req, res) => {
 });
 
 app.use((err, req, res, next) => {
-  console.error('[server] Error:', err);
+  console.error('[server] error middleware:', err);
   const status = err.status || err.statusCode || 500;
   const message = NODE_ENV === 'development' ? err.message : 'Internal Server Error';
   res.status(status).json({
@@ -167,12 +152,7 @@ const startServer = async () => {
 
     const io = new Server(server, {
       cors: {
-        origin: (origin, callback) => {
-          if (!origin || isOriginAllowed(origin)) {
-            return callback(null, true);
-          }
-          return callback(new Error(`Socket.IO CORS blocked: ${origin}`));
-        },
+        origin: true,
         credentials: true,
         methods: ['GET', 'POST', 'OPTIONS'],
         allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
@@ -184,8 +164,6 @@ const startServer = async () => {
       pingTimeout: 60000,
       connectTimeout: 45000,
       timeout: 60000,
-      maxHttpBufferSize: 1e6,
-      allowUpgrades: true,
     });
 
     io.use((socket, next) => {
@@ -198,7 +176,7 @@ const startServer = async () => {
         } catch (err) {
           socket.userId = `anon-${Date.now()}`;
           socket.isAuthenticated = false;
-          console.warn('[socket] Invalid token received during handshake');
+          console.warn('[socket] invalid token handshake');
         }
       } else {
         socket.userId = `anon-${Date.now()}`;
@@ -208,23 +186,23 @@ const startServer = async () => {
     });
 
     io.on('connection', (socket) => {
+      const transport = socket.conn.transport.name;
       const origin = socket.handshake.headers.origin || socket.request.headers.origin || 'unknown';
-      const transportName = socket.conn.transport.name;
+
       console.log('[socket] connected', {
-        socketId: socket.id,
+        id: socket.id,
         userId: socket.userId,
         authenticated: socket.isAuthenticated,
-        transport: transportName,
+        transport,
         origin,
-        time: new Date().toISOString(),
       });
 
       socket.join(`user:${socket.userId}`);
 
       socket.emit('server:connected', {
-        timestamp: new Date().toISOString(),
         socketId: socket.id,
-        transport: transportName,
+        transport,
+        timestamp: new Date().toISOString(),
       });
 
       socket.on('health:ping', () => {
@@ -236,12 +214,15 @@ const startServer = async () => {
       });
 
       socket.on('message', (payload) => {
-        console.log('[socket] message', { socketId: socket.id, payload });
-        io.emit('message', { from: socket.id, payload, timestamp: new Date().toISOString() });
+        io.emit('message', {
+          from: socket.id,
+          payload,
+          timestamp: new Date().toISOString(),
+        });
       });
 
       socket.on('disconnect', (reason) => {
-        console.log('[socket] disconnected', { socketId: socket.id, reason });
+        console.log('[socket] disconnected', { id: socket.id, reason });
       });
 
       socket.on('connect_error', (err) => {
@@ -254,7 +235,7 @@ const startServer = async () => {
     });
 
     io.engine.on('connection_error', (error) => {
-      console.warn('[socket] engine connection_error', error.message || error);
+      console.warn('[socket] engine connection_error', error?.message || error);
     });
 
     app.set('io', io);
@@ -262,13 +243,13 @@ const startServer = async () => {
 
     server.listen(PORT, '0.0.0.0', () => {
       console.log('=============================================');
-      console.log(`🚀 UniMart Backend running on port ${PORT}`);
-      console.log('📡 Socket.IO path: https://unimart-backends-2.onrender.com/socket.io');
-      console.log(`🌍 Health check: http://localhost:${PORT}/health`);
+      console.log(`🚀 UniMart Backend running on 0.0.0.0:${PORT}`);
+      console.log('📡 Socket.IO path:', `${FRONTEND_URL.replace(/\/+$/, '')}/socket.io`);
+      console.log('🌍 Health check:', `http://localhost:${PORT}/health`);
       console.log('=============================================');
     });
   } catch (error) {
-    console.error('[server] Startup error:', error);
+    console.error('[server] startup error:', error);
     process.exit(1);
   }
 };
