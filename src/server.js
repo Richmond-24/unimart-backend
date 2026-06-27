@@ -19,10 +19,10 @@ const MONGO_URI = (process.env.MONGO_URI || 'mongodb://localhost:27017/unimart')
 const JWT_SECRET = (process.env.JWT_SECRET || 'unimart-secret-key').trim();
 const FRONTEND_URL = (process.env.FRONTEND_URL || 'https://unimart-app-kappa.vercel.app').trim();
 
-const allowedOrigins = FRONTEND_URL.split(',')
-  .map((origin) => origin.trim().replace(/\/+$|\s+/g, ''))
-  .filter(Boolean)
-  .concat(['http://localhost:3000', 'http://127.0.0.1:3000']);
+const allowedOrigins = [
+  'https://unimart-app-kappa.vercel.app',
+  'http://localhost:3000',
+];
 
 const isOriginAllowed = (origin) => {
   if (!origin) return true;
@@ -47,8 +47,8 @@ const corsOptions = {
     return callback(new Error(`CORS policy blocked origin: ${origin}`));
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
   preflightContinue: false,
   optionsSuccessStatus: 200,
 };
