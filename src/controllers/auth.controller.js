@@ -30,21 +30,27 @@ const sendToken = (user, statusCode, res) => {
 exports.register = async (req, res, next) => {
   try {
     const rawName = req.body.name || '';
-    const rawEmail = req.body.email || '';
+    const rawFirstName = req.body.firstName || req.body.first_name || '';
+    const rawLastName = req.body.lastName || req.body.last_name || '';
+    const rawEmail = req.body.email || req.body.emailAddress || '';
     const rawPassword = req.body.password || '';
-    const name = String(rawName).trim();
+    const rawPasswordConfirm = req.body.passwordConfirm || req.body.password_confirmation || '';
+
+    const computedName = `${rawFirstName || ''} ${rawLastName || ''}`.trim();
+    const name = String(rawName || computedName || '').trim();
     const email = String(rawEmail).toLowerCase().trim();
     const password = String(rawPassword);
+    const passwordConfirm = String(rawPasswordConfirm);
     const phone = req.body.phone || '';
     const university = req.body.university || '';
-    const studentId = req.body.studentId || '';
+    const studentId = req.body.studentId || req.body.student_id || '';
     const department = req.body.department || '';
     const avatar = req.body.avatar || '';
     const location = req.body.location || '';
     const locationCoords = req.body.locationCoords || {};
     const role = req.body.role === 'seller' ? 'seller' : 'buyer';
-    const shopName = req.body.shopName || '';
-    const shopBio = req.body.shopBio || '';
+    const shopName = req.body.shopName || req.body.shop_name || '';
+    const shopBio = req.body.shopBio || req.body.shop_bio || '';
 
     console.log('📝 Registration request received:', {
       name: name ? name.substring(0, 30) : null,
@@ -70,6 +76,10 @@ exports.register = async (req, res, next) => {
 
     if (password.length < 8) {
       return res.status(400).json({ success: false, message: 'Password must be at least 8 characters long.' });
+    }
+
+    if (passwordConfirm && password !== passwordConfirm) {
+      return res.status(400).json({ success: false, message: 'Password confirmation does not match.' });
     }
 
     if (password.length > 128) {

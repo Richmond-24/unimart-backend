@@ -11,7 +11,7 @@ const {
   resetPassword,
   verifyEmail,
 } = require('../controllers/authController');
-const { authMiddleware, authRateLimitMiddleware } = require('../middleware/auth');
+const { authMiddleware } = require('../middleware/auth');
 
 /**
  * Public Routes (No Authentication Required)
@@ -23,7 +23,7 @@ const { authMiddleware, authRateLimitMiddleware } = require('../middleware/auth'
  * @access  Public
  * @body    { firstName, lastName, email, password, passwordConfirm, university?, yearOfStudy? }
  */
-router.post('/register', authRateLimitMiddleware, register);
+router.post('/register', register);
 
 /**
  * @route   POST /api/auth/login
@@ -31,7 +31,7 @@ router.post('/register', authRateLimitMiddleware, register);
  * @access  Public
  * @body    { email, password }
  */
-router.post('/login', authRateLimitMiddleware, login);
+router.post('/login', login);
 
 /**
  * @route   POST /api/auth/forgot-password
@@ -39,7 +39,7 @@ router.post('/login', authRateLimitMiddleware, login);
  * @access  Public
  * @body    { email }
  */
-router.post('/forgot-password', authRateLimitMiddleware, forgotPassword);
+router.post('/forgot-password', forgotPassword);
 
 /**
  * @route   POST /api/auth/reset-password
@@ -47,7 +47,7 @@ router.post('/forgot-password', authRateLimitMiddleware, forgotPassword);
  * @access  Public
  * @body    { token, newPassword, passwordConfirm }
  */
-router.post('/reset-password', authRateLimitMiddleware, resetPassword);
+router.post('/reset-password', resetPassword);
 
 /**
  * @route   POST /api/auth/verify-email

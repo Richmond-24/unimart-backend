@@ -8,7 +8,6 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
-const rateLimit = require('express-rate-limit');
 const http = require('http');
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
@@ -111,15 +110,6 @@ if (NODE_ENV === 'development') {
 } else {
   app.use(morgan('combined'));
 }
-
-// Rate limiting - global
-app.use(rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 200, // limit each IP to 200 requests per windowMs
-  message: 'Too many requests from this IP, please try again later.',
-  standardHeaders: true,
-  legacyHeaders: false,
-}));
 
 // ==================== SOCKET.IO SETUP ====================
 const io = new Server(server, {

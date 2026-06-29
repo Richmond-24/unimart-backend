@@ -14,7 +14,6 @@ const { Server } = require('socket.io');
 const dotenv = require('dotenv');
 const helmet = require('helmet');
 const morgan = require('morgan');
-const rateLimit = require('express-rate-limit');
 const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 
@@ -241,14 +240,7 @@ app.get('/', (req, res) => {
 // ============================================
 
 try {
-  // Auth routes with rate limiting
-  app.use('/api/auth', rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: Number(process.env.AUTH_RATE_LIMIT_MAX || '100'),
-    standardHeaders: true,
-    legacyHeaders: false,
-    skip: (req) => NODE_ENV === 'development',
-  }), require('./routes/auth.routes.js'));
+  app.use('/api/auth', require('./routes/auth.routes.js'));
 
   // All other API routes
   app.use('/api/users', require('./routes/user.routes.js'));

@@ -165,5 +165,4 @@ module.exports = {
   sellerMiddleware,
   adminMiddleware,
   optionalAuthMiddleware,
-  authRateLimitMiddleware,
 };
