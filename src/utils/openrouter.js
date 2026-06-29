@@ -1,10 +1,17 @@
 // backend/utils/openrouter.js
-const fetch = require('node-fetch');
-
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
+async function getFetch() {
+  if (typeof globalThis.fetch === 'function') {
+    return globalThis.fetch;
+  }
+  const { default: fetch } = await import('node-fetch');
+  return fetch;
+}
+
 async function callOpenRouter({ model, messages, max_tokens = 300, temperature = 0.7 }) {
+  const fetch = await getFetch();
   const response = await fetch(OPENROUTER_API_URL, {
     method: 'POST',
     headers: {

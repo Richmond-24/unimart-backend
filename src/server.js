@@ -31,13 +31,14 @@ const MONGO_URI = (process.env.MONGO_URI || 'mongodb://localhost:27017/unimart')
 const JWT_SECRET = (process.env.JWT_SECRET || 'unimart-secret-key').trim();
 const FRONTEND_URL = (process.env.FRONTEND_URL || 'https://unimart-app-kappa.vercel.app').trim();
 
-// Build allowed origins list - MUST include Vercel frontend
-const ALLOWED_ORIGINS = [
+// Build allowed origins list - MUST include Vercel frontend and local dev origins
+const ALLOWED_ORIGINS = Array.from(new Set([
+  FRONTEND_URL,
   'https://unimart-app-kappa.vercel.app',
   'http://localhost:3000',
   'http://localhost:3001',
   'http://127.0.0.1:3000',
-];
+]));
 
 // Log startup info
 console.log('\n========================================');
@@ -145,6 +146,17 @@ app.use((req, res, next) => {
   }
   
   next();
+});
+
+// JSON parse error handler
+app.use((err, req, res, next) => {
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid JSON payload. Please send valid JSON in the request body.'
+    });
+  }
+  next(err);
 });
 
 // ============================================

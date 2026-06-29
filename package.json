@@ -9,7 +9,7 @@
   "scripts": {
     "start": "node src/server.js",
     "start:prod": "NODE_ENV=production node src/server.js",
-    "start:render": "NODE_ENV=production node src/server.js",
+    "start:render": "NODE_ENV=production node src/server-render-production.js",
     "render": "npm run start:render",
     "dev": "nodemon src/server.js",
     "seed": "node src/utils/seed.js",

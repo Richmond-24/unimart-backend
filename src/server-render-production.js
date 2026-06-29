@@ -22,14 +22,19 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/unimart';
 
-// Parse FRONTEND_URL (comma-separated list)
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
-const allowedOrigins = FRONTEND_URL.split(',')
-  .map(url => url.trim())
-  .filter(url => url.length > 0);
+// Parse FRONTEND_URL (comma-separated list) and include common dev origins
+const FRONTEND_URL = process.env.FRONTEND_URL || 'https://unimart-app-kappa.vercel.app';
+const allowedOrigins = Array.from(new Set([
+  FRONTEND_URL,
+  'https://unimart-app-kappa.vercel.app',
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://127.0.0.1:3000',
+]).values()).filter(url => url.trim().length > 0);
 
 console.log(`[${new Date().toISOString()}] 🚀 Starting UniMart Backend`);
 console.log(`[${new Date().toISOString()}] 📝 Environment: ${NODE_ENV}`);
+console.log(`[${new Date().toISOString()}] 🌐 FRONTEND_URL: ${FRONTEND_URL}`);
 console.log(`[${new Date().toISOString()}] 🌐 Allowed Origins:`, allowedOrigins);
 console.log(`[${new Date().toISOString()}] 🔌 Port: ${PORT}`);
 
@@ -47,9 +52,13 @@ const corsOptions = {
   origin: function (origin, callback) {
     // Allow requests with no origin (mobile apps, curl requests)
     if (!origin) return callback(null, true);
-    
-    // Allow all origins in production for now
-    return callback(null, true);
+
+    const normalizedOrigin = origin.trim().replace(/\/+$|\s+/g, '');
+    if (allowedOrigins.includes(normalizedOrigin)) {
+      return callback(null, true);
+    }
+
+    return callback(new Error(`CORS not allowed for origin: ${origin}`));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -74,6 +83,17 @@ app.use((req, res, next) => {
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// JSON parse error handler
+app.use((err, req, res, next) => {
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid JSON payload. Please send valid JSON in the request body.'
+    });
+  }
+  next(err);
+});
 
 // Logging middleware
 if (NODE_ENV === 'development') {
