@@ -30,18 +30,20 @@ const sendToken = (user, statusCode, res) => {
 exports.register = async (req, res, next) => {
   try {
     const rawName = req.body.name || '';
+    const rawFullName = req.body.fullName || req.body.full_name || '';
     const rawFirstName = req.body.firstName || req.body.first_name || '';
     const rawLastName = req.body.lastName || req.body.last_name || '';
     const rawEmail = req.body.email || req.body.emailAddress || '';
     const rawPassword = req.body.password || '';
     const rawPasswordConfirm = req.body.passwordConfirm || req.body.password_confirmation || '';
+    const rawPhoneNumber = req.body.phoneNumber || req.body.phone_number || '';
 
     const computedName = `${rawFirstName || ''} ${rawLastName || ''}`.trim();
-    const name = String(rawName || computedName || '').trim();
+    const name = String(rawName || rawFullName || computedName || '').trim();
     const email = String(rawEmail).toLowerCase().trim();
     const password = String(rawPassword);
     const passwordConfirm = String(rawPasswordConfirm);
-    const phone = req.body.phone || '';
+    const phone = req.body.phone || rawPhoneNumber || '';
     const university = req.body.university || '';
     const studentId = req.body.studentId || req.body.student_id || '';
     const department = req.body.department || '';
