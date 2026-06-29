@@ -25,7 +25,6 @@ const authMiddleware = (req, res, next) => {
     return res.status(401).json({
       success: false,
       message: 'Token verification failed. Please login again.',
-      error: error.message,
     });
   }
 };

@@ -71,12 +71,22 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions)); // Handle preflight for all routes
 
-// Additional CORS headers middleware
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+function applyCorsHeaders(req, res) {
+  const origin = req.headers.origin || '*';
+  res.header('Access-Control-Allow-Origin', origin);
   res.header('Access-Control-Allow-Credentials', 'true');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
+  res.header('Access-Control-Expose-Headers', 'Content-Length, X-JSON-Response, Access-Control-Allow-Origin');
+  res.header('Access-Control-Max-Age', '86400');
+}
+
+// Additional CORS headers middleware (ensures headers on all responses)
+app.use((req, res, next) => {
+  applyCorsHeaders(req, res);
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
   next();
 });
 
@@ -433,6 +443,7 @@ try {
 
 // 404 handler
 app.use((req, res) => {
+  applyCorsHeaders(req, res);
   res.status(404).json({
     success: false,
     message: 'Route not found',
@@ -443,6 +454,7 @@ app.use((req, res) => {
 
 // Global error handler
 app.use((err, req, res, next) => {
+  applyCorsHeaders(req, res);
   console.error(`[${new Date().toISOString()}] Error: ${err.message}`, err.stack);
 
   const statusCode = err.statusCode || 500;

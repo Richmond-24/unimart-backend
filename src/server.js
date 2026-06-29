@@ -118,6 +118,16 @@ const corsOptions = {
   optionsSuccessStatus: 200
 };
 
+function applyCorsHeaders(req, res) {
+  const origin = req.headers.origin || '*';
+  res.header('Access-Control-Allow-Origin', origin);
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
+  res.header('Access-Control-Expose-Headers', 'Content-Length, X-JSON-Response, Access-Control-Allow-Origin');
+  res.header('Access-Control-Max-Age', '86400');
+}
+
 // Apply CORS to all routes
 app.use(cors(corsOptions));
 
@@ -126,30 +136,24 @@ app.options('*', cors(corsOptions));
 
 // Additional CORS headers middleware (belt and suspenders)
 app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  
-  // Always set CORS headers in production
-  res.header('Access-Control-Allow-Origin', origin || '*');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept');
-  res.header('Access-Control-Max-Age', '86400');
-  
+  applyCorsHeaders(req, res);
+
   // Handle preflight requests
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
   }
-  
+
   // Log CORS info in development
   if (NODE_ENV === 'development') {
-    console.log(`[CORS] ${req.method} ${req.path} from ${origin || 'unknown'}`);
+    console.log(`[CORS] ${req.method} ${req.path} from ${req.headers.origin || 'unknown'}`);
   }
-  
+
   next();
 });
 
 // JSON parse error handler
 app.use((err, req, res, next) => {
+  applyCorsHeaders(req, res);
   if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
     return res.status(400).json({
       success: false,
@@ -280,6 +284,7 @@ try {
 // 404 HANDLER
 // ============================================
 app.use((req, res) => {
+  applyCorsHeaders(req, res);
   res.status(404).json({
     success: false,
     message: `Route not found: ${req.method} ${req.originalUrl}`,
@@ -297,6 +302,7 @@ app.use((req, res) => {
 // ERROR HANDLER
 // ============================================
 app.use((err, req, res, next) => {
+  applyCorsHeaders(req, res);
   const status = err.status || err.statusCode || 500;
   const message = NODE_ENV === 'development' ? err.message : 'Internal Server Error';
 

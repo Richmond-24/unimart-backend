@@ -29,17 +29,30 @@ const sendToken = (user, statusCode, res) => {
 // @route POST /api/auth/register
 exports.register = async (req, res, next) => {
   try {
-    const { name, email, password, phone, university, studentId, department, avatar, role, shopName, shopBio } = req.body;
+    const rawName = req.body.name || '';
+    const rawEmail = req.body.email || '';
+    const rawPassword = req.body.password || '';
+    const name = String(rawName).trim();
+    const email = String(rawEmail).toLowerCase().trim();
+    const password = String(rawPassword);
+    const phone = req.body.phone || '';
+    const university = req.body.university || '';
+    const studentId = req.body.studentId || '';
+    const department = req.body.department || '';
+    const avatar = req.body.avatar || '';
+    const location = req.body.location || '';
+    const locationCoords = req.body.locationCoords || {};
+    const role = req.body.role === 'seller' ? 'seller' : 'buyer';
+    const shopName = req.body.shopName || '';
+    const shopBio = req.body.shopBio || '';
 
     console.log('📝 Registration request received:', {
-      name,
-      email,
-      phone,
+      name: name ? name.substring(0, 30) : null,
+      email: email ? '***' + email.slice(-10) : null,
       university,
-      studentId,
-      department,
       role,
       hasPassword: !!password,
+      location: location ? String(location).substring(0, 100) : null,
     });
 
     // Validate required fields
@@ -49,6 +62,18 @@ exports.register = async (req, res, next) => {
         success: false, 
         message: 'Name, email, and password are required' 
       });
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ success: false, message: 'Please enter a valid email address.' });
+    }
+
+    if (password.length < 8) {
+      return res.status(400).json({ success: false, message: 'Password must be at least 8 characters long.' });
+    }
+
+    if (password.length > 128) {
+      return res.status(400).json({ success: false, message: 'Password is too long.' });
     }
 
     // Check if email already exists
@@ -61,17 +86,22 @@ exports.register = async (req, res, next) => {
       });
     }
 
-    // Create new user
+    // Normalize and create new user
     const user = await User.create({ 
       name, 
       email, 
       password, 
-      phone: phone || '',
-      university: university || '',
-      studentId: studentId || '',
-      department: department || '',
-      avatar: avatar || '',
-      role: role === 'seller' ? 'seller' : 'buyer' 
+      phone: String(phone).trim(),
+      university: String(university).trim(),
+      studentId: String(studentId).trim(),
+      department: String(department).trim(),
+      avatar: String(avatar).trim(),
+      location: String(location).trim(),
+      locationCoords: {
+        lat: typeof locationCoords?.lat === 'number' ? locationCoords.lat : null,
+        lon: typeof locationCoords?.lon === 'number' ? locationCoords.lon : null,
+      },
+      role
     });
 
     console.log('✅ User created successfully:', { _id: user._id, email: user.email });
@@ -110,7 +140,6 @@ exports.register = async (req, res, next) => {
       message: err.message,
       code: err.code,
       errors: err.errors,
-      stack: err.stack
     });
     next(err); 
   }
@@ -218,10 +247,10 @@ exports.login = async (req, res, next) => {
     
     // Check if user exists
     if (!user) {
-      console.log('❌ User not found:', email);
+      console.log('❌ Login failed for email:', email);
       return res.status(401).json({ 
         success: false, 
-        message: 'No account found with this email. Would you like to sign up?' 
+        message: 'Email or password is incorrect. Please check and try again.' 
       });
     }
 
@@ -238,7 +267,7 @@ exports.login = async (req, res, next) => {
     }
 
     if (!passwordMatch) {
-      console.log('❌ Password mismatch for user:', email);
+      console.log('❌ Login failed for email:', email);
       return res.status(401).json({ 
         success: false, 
         message: 'Email or password is incorrect. Please check and try again.' 
