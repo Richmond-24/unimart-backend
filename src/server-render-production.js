@@ -37,27 +37,39 @@ console.log(`[${new Date().toISOString()}] 🔌 Port: ${PORT}`);
 const app = express();
 const server = http.createServer(app);
 
-// Security middleware
-app.use(helmet());
+// Security middleware - more permissive for CORS issues
+app.use(helmet({
+  crossOriginResourcePolicy: false,
+}));
 
-// CORS configuration
-app.use(cors({
+// CORS configuration - ensures proper preflight handling
+const corsOptions = {
   origin: function (origin, callback) {
     // Allow requests with no origin (mobile apps, curl requests)
     if (!origin) return callback(null, true);
     
-    // Check if origin is in allowed list
-    if (allowedOrigins.length === 0 || allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
-      return callback(null, true);
-    }
-    
-    return callback(new Error('CORS policy: Origin not allowed'));
+    // Allow all origins in production for now
+    return callback(null, true);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  optionsSuccessStatus: 200
-}));
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+  exposedHeaders: ['Content-Length', 'X-JSON-Response'],
+  optionsSuccessStatus: 200,
+  maxAge: 86400 // 24 hours
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // Handle preflight for all routes
+
+// Additional CORS headers middleware
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  next();
+});
 
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
@@ -82,13 +94,10 @@ app.use(rateLimit({
 // ==================== SOCKET.IO SETUP ====================
 const io = new Server(server, {
   cors: {
-    origin: function (origin, callback) {
-      // Allow all origins for WebSocket in production
-      callback(null, true);
-    },
+    origin: '*',
     credentials: true,
     methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
   },
   transports: ['websocket', 'polling'],
   allowEIO3: true,
@@ -100,7 +109,9 @@ const io = new Server(server, {
   path: '/socket.io/',
   serveClient: false,
   cookie: false,
-  perMessageDeflate: false
+  perMessageDeflate: false,
+  allowUpgrades: true,
+  upgradeTimeout: 10000
 });
 
 console.log(`[${new Date().toISOString()}] ✅ Socket.IO configured`);
@@ -151,6 +162,7 @@ io.on('connection', (socket) => {
   socketUsers.set(userId, socket.id);
 
   console.log(`[${new Date().toISOString()}] ✅ Socket connected: ${socket.id} (User: ${userId})`);
+  socket.emit('connection_established', { success: true, userId, socketId: socket.id });
 
   // Broadcast user online
   socket.join(`user:${userId}`);
@@ -240,6 +252,11 @@ io.on('connection', (socket) => {
 
   socket.on('error', (error) => {
     console.error(`[Socket.IO] Socket error: ${error}`);
+  });
+
+  socket.on('connect_error', (error) => {
+    console.error(`[Socket.IO] Connection error: ${error.message}`);
+    socket.emit('connection_error', { message: error.message });
   });
 });
 
