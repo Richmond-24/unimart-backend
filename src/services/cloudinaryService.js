@@ -12,13 +12,18 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-// Check if Cloudinary is configured
-if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
-  console.error('❌ Cloudinary credentials missing in .env file');
-  process.exit(1);
-}
+// Check if Cloudinary is configured. Do NOT crash the process if it isn't:
+// image uploads will fail gracefully, but the rest of the API (auth, signup,
+// etc.) must stay up.
+const isCloudinaryConfigured = Boolean(
+  process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET
+);
 
-console.log('✅ Cloudinary configured successfully');
+if (!isCloudinaryConfigured) {
+  console.warn('⚠️  Cloudinary credentials missing — image uploads disabled, but the server will continue running');
+} else {
+  console.log('✅ Cloudinary configured successfully');
+}
 
 // Configure storage for product images
 const productStorage = new CloudinaryStorage({
