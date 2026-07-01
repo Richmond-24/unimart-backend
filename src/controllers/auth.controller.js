@@ -2,7 +2,6 @@ const User = require('../models/User.model');
 const Seller = require('../models/Seller.model');
 const VerificationToken = require('../models/VerificationToken');
 const crypto = require('crypto');
-const { sendVerificationEmail, sendWelcomeEmail } = require('../utils/emailService');
 
 // Helper: send token response
 const sendToken = (user, statusCode, res) => {
@@ -118,6 +117,7 @@ exports.register = async (req, res, next) => {
 
     console.log('✅ User created successfully:', { _id: user._id, email: user.email });
 
+<<<<<<< HEAD
     // For now: do NOT create verification tokens or send OTPs.
     // Immediately mark user as verified.
     try {
@@ -125,6 +125,15 @@ exports.register = async (req, res, next) => {
       await user.save();
     } catch (verifyErr) {
       console.error('❌ Failed to set verified flag:', verifyErr);
+=======
+    // For now: do NOT use SMTP or welcome email sending.
+    try {
+      user.isVerified = true;
+      await user.save();
+      console.log('✅ User marked verified without SMTP welcome email');
+    } catch (verifyErr) {
+      console.error('❌ Failed to mark user verified:', verifyErr);
+>>>>>>> dca8b7d (Add Windsurf IDE configuration)
     }
 
     // Send welcome email in the background. Never await it: SMTP can be slow
@@ -185,11 +194,8 @@ exports.verifyEmail = async (req, res, next) => {
     // remove tokens for this user
     await VerificationToken.deleteMany({ user: user._id }).catch(()=>{});
 
-    // send confirmation / welcome email
-    try {
-      await sendWelcomeEmail(user.email, (user.name||'').split(' ')[0] || '');
-      console.log('📧 Verification success email sent to', user.email);
-    } catch (e) { console.error('❌ Failed to send welcome email:', e); }
+    // SMTP disabled for verification completion.
+    console.log('✅ Email verification completed without SMTP send for', user.email);
 
     res.json({ success: true, message: 'Email verified' });
   } catch (err) { console.error('❌ verifyEmail error:', err); next(err); }
@@ -218,10 +224,9 @@ exports.resendVerification = async (req, res, next) => {
     const verificationLink = `${appUrl}/api/auth/verify?token=${encodeURIComponent(token)}`;
     const firstName = (user.name || '').split(' ')[0] || '';
 
-    const sent = await sendVerificationEmail(user.email, firstName, verificationLink);
-    console.log(`📧 Resend verification email ${sent ? 'sent' : 'failed'} for user: ${user.email}`);
+    console.log(`✅ Resend verification requested for ${user.email}, SMTP disabled`);
 
-    res.json({ success: true, message: sent ? 'Verification email sent' : 'Failed to send verification email' });
+    res.json({ success: true, message: 'Verification email sending is disabled in this deployment.' });
   } catch (err) { console.error('❌ resendVerification error:', err); next(err); }
 };
 
