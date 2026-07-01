@@ -378,11 +378,11 @@ exports.savePushToken = async (req, res, next) => {
 // Minimal guest login: create a guest user and return token
 exports.guestLogin = async (req, res, next) => {
   try {
-    const guestId = `guest_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+    const guestId = `guest_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
     const guestUser = await User.create({
       name: 'Guest User',
       email: `${guestId}@guest.local`,
-      password: Math.random().toString(36).slice(2,12),
+      password: crypto.randomBytes(16).toString('hex'),
       guestId,
       isGuest: true,
       role: 'guest',
