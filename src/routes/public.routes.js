@@ -5,6 +5,7 @@ const express = require('express');
 const router = express.Router();
 const Listing = require('../models/Listing');
 const Category = require('../models/Category.model');
+const Seller = require('../models/Seller.model');
 const { authMiddleware, optionalAuthMiddleware } = require('../middleware/auth');
 
 // ==================== CATEGORY-SPECIFIC ENDPOINTS ====================
@@ -239,7 +240,47 @@ router.get('/campus-trending', async (req, res) => {
   }
 });
 
-// 🔥 Flash Deals (items with discount)
+// � Top Sellers
+router.get('/top-sellers', async (req, res) => {
+  try {
+    const { limit = 10, university } = req.query;
+    const query = { isActive: true };
+    if (university) query.university = university;
+
+    const sellers = await Seller.find(query)
+      .populate('user', 'name avatar email university hall')
+      .sort({ rating: -1, totalSales: -1, createdAt: -1 })
+      .limit(parseInt(limit));
+
+    res.json({ success: true, data: sellers });
+  } catch (error) {
+    console.error('Error fetching top sellers:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 🧑‍💼 Public Sellers
+router.get('/sellers', async (req, res) => {
+  try {
+    const { limit = 10, page = 1, university } = req.query;
+    const query = { isActive: true };
+    if (university) query.university = university;
+
+    const sellers = await Seller.find(query)
+      .populate('user', 'name avatar email university hall')
+      .sort({ rating: -1, totalSales: -1, createdAt: -1 })
+      .skip((parseInt(page) - 1) * parseInt(limit))
+      .limit(parseInt(limit));
+
+    const total = await Seller.countDocuments(query);
+    res.json({ success: true, data: sellers, total, page: Number(page) });
+  } catch (error) {
+    console.error('Error fetching public sellers:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// �🔥 Flash Deals (items with discount)
 router.get('/flash-deals', async (req, res) => {
   try {
     const { limit = 10, page = 1 } = req.query;
