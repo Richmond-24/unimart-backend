@@ -51,7 +51,21 @@ const createTransporter = () => {
   });
 };
 
-const transporter = createTransporter();
+// Only send email when a provider is actually configured. Otherwise skip the
+// SMTP connection entirely so email can never delay or break API responses.
+const isEmailConfigured = () => {
+  const service = process.env.EMAIL_SERVICE;
+  if (service === 'gmail') return Boolean(process.env.EMAIL_USER && process.env.EMAIL_PASSWORD);
+  if (service === 'sendgrid') return Boolean(process.env.SENDGRID_API_KEY);
+  return Boolean(process.env.MAILTRAP_USER && process.env.MAILTRAP_PASSWORD);
+};
+
+const emailEnabled = isEmailConfigured();
+const transporter = emailEnabled ? createTransporter() : null;
+
+if (!emailEnabled) {
+  console.warn('⚠️  Email provider not configured — skipping all outbound email (API unaffected)');
+}
 
 /**
  * Send verification email
@@ -60,6 +74,7 @@ const transporter = createTransporter();
  * @param {string} verificationLink - Verification link
  */
 const sendVerificationEmail = async (email, firstName, verificationLink) => {
+  if (!transporter) return false;
   const mailOptions = {
     from: process.env.EMAIL_FROM || 'noreply@unimart.com',
     to: email,
@@ -111,6 +126,7 @@ const sendVerificationEmail = async (email, firstName, verificationLink) => {
  * @param {string} resetLink - Password reset link
  */
 const sendPasswordResetEmail = async (email, firstName, resetLink) => {
+  if (!transporter) return false;
   const mailOptions = {
     from: process.env.EMAIL_FROM || 'noreply@unimart.com',
     to: email,
@@ -161,6 +177,7 @@ const sendPasswordResetEmail = async (email, firstName, resetLink) => {
  * @param {string} firstName - User first name
  */
 const sendWelcomeEmail = async (email, firstName) => {
+  if (!transporter) return false;
   const mailOptions = {
     from: process.env.EMAIL_FROM || 'noreply@unimart.com',
     to: email,
@@ -219,6 +236,7 @@ const sendWelcomeEmail = async (email, firstName) => {
  * @param {string} shopName - Shop name
  */
 const sendSellerApprovalEmail = async (email, firstName, shopName) => {
+  if (!transporter) return false;
   const mailOptions = {
     from: process.env.EMAIL_FROM || 'noreply@unimart.com',
     to: email,

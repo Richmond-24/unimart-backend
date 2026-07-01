@@ -516,10 +516,11 @@ const startServer = async () => {
   }
 };
 
-// Handle unhandled rejections
+// Handle unhandled rejections. Do NOT exit the process: killing the server on
+// any stray rejection turns a single request error into a full outage /
+// crash-loop, which surfaces to clients as "can't connect to server".
 process.on('unhandledRejection', (err) => {
-  console.error(`[${new Date().toISOString()}] ❌ Unhandled Promise Rejection:`, err.message);
-  process.exit(1);
+  console.error(`[${new Date().toISOString()}] ❌ Unhandled Promise Rejection:`, err && err.message ? err.message : err);
 });
 
 // Handle uncaught exceptions
