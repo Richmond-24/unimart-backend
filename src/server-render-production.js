@@ -57,6 +57,10 @@ const corsOptions = {
       return callback(null, true);
     }
 
+    if (NODE_ENV === 'production') {
+      return callback(null, true);
+    }
+
     return callback(new Error(`CORS not allowed for origin: ${origin}`));
   },
   credentials: true,
