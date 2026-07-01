@@ -79,17 +79,17 @@ const corsOptions = {
       return callback(null, true);
     }
 
+    // In production, allow any origin to prevent accidental CORS blocks
+    // from deployed frontend or temporary staging domains.
+    if (NODE_ENV === 'production') {
+      return callback(null, true);
+    }
+
     // Normalize the origin (remove trailing slashes)
     const normalizedOrigin = origin.trim().replace(/\/+$/, '');
 
     // Check if origin is in whitelist
     if (ALLOWED_ORIGINS.some(allowed => normalizedOrigin === allowed)) {
-      return callback(null, true);
-    }
-
-    // In production, allow all origins to prevent CORS blocking
-    // The JWT token provides actual security
-    if (NODE_ENV === 'production') {
       return callback(null, true);
     }
 

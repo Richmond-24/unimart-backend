@@ -52,6 +52,12 @@ const corsOptions = {
     // Allow requests with no origin (mobile apps, curl requests)
     if (!origin) return callback(null, true);
 
+    // In production, allow any origin to prevent accidental CORS blocks
+    // from the deployed frontend or temporary staging domains.
+    if (NODE_ENV === 'production') {
+      return callback(null, true);
+    }
+
     const normalizedOrigin = origin.trim().replace(/\/+$|\s+/g, '');
     if (allowedOrigins.includes(normalizedOrigin)) {
       return callback(null, true);
