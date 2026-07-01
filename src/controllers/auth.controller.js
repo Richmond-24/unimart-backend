@@ -119,16 +119,21 @@ exports.register = async (req, res, next) => {
     console.log('✅ User created successfully:', { _id: user._id, email: user.email });
 
     // For now: do NOT create verification tokens or send OTPs.
-    // Immediately mark user as verified and send welcome email.
+    // Immediately mark user as verified.
     try {
       user.isVerified = true;
       await user.save();
-      const firstName = (user.name || '').split(' ')[0] || '';
-      const sent = await sendWelcomeEmail(user.email, firstName);
-      console.log(`📧 Welcome email ${sent ? 'sent' : 'failed'} for user: ${user.email}`);
-    } catch (emailErr) {
-      console.error('❌ Failed to send welcome email / set verified flag:', emailErr);
+    } catch (verifyErr) {
+      console.error('❌ Failed to set verified flag:', verifyErr);
     }
+
+    // Send welcome email in the background. Never await it: SMTP can be slow
+    // or unreachable in production, and blocking here makes the signup request
+    // hang until the socket times out.
+    const firstName = (user.name || '').split(' ')[0] || '';
+    sendWelcomeEmail(user.email, firstName)
+      .then((sent) => console.log(`📧 Welcome email ${sent ? 'sent' : 'failed'} for user: ${user.email}`))
+      .catch((emailErr) => console.error('❌ Failed to send welcome email:', emailErr));
 
     // Auto-create seller profile if role is seller
     if (user.role === 'seller') {
@@ -373,11 +378,11 @@ exports.savePushToken = async (req, res, next) => {
 // Minimal guest login: create a guest user and return token
 exports.guestLogin = async (req, res, next) => {
   try {
-    const guestId = `guest_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+    const guestId = `guest_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
     const guestUser = await User.create({
       name: 'Guest User',
       email: `${guestId}@guest.local`,
-      password: Math.random().toString(36).slice(2,12),
+      password: crypto.randomBytes(16).toString('hex'),
       guestId,
       isGuest: true,
       role: 'guest',

@@ -17,6 +17,9 @@ const createTransporter = () => {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASSWORD,
       },
+      connectionTimeout: 5000,
+      greetingTimeout: 5000,
+      socketTimeout: 10000,
     });
   }
 
@@ -28,6 +31,9 @@ const createTransporter = () => {
         user: 'apikey',
         pass: process.env.SENDGRID_API_KEY,
       },
+      connectionTimeout: 5000,
+      greetingTimeout: 5000,
+      socketTimeout: 10000,
     });
   }
 
@@ -39,6 +45,9 @@ const createTransporter = () => {
       user: process.env.MAILTRAP_USER || 'test',
       pass: process.env.MAILTRAP_PASSWORD || 'test',
     },
+    connectionTimeout: 5000,
+    greetingTimeout: 5000,
+    socketTimeout: 10000,
   });
 };
 
