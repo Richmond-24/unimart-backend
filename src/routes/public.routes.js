@@ -244,13 +244,68 @@ router.get('/campus-trending', async (req, res) => {
 router.get('/top-sellers', async (req, res) => {
   try {
     const { limit = 10, university } = req.query;
-    const query = { isActive: true };
-    if (university) query.university = university;
+    const sellerMatch = { isActive: true };
+    if (university) sellerMatch.university = university;
 
-    const sellers = await Seller.find(query)
-      .populate('user', 'name avatar email university hall')
-      .sort({ rating: -1, totalSales: -1, createdAt: -1 })
-      .limit(parseInt(limit));
+    const sellers = await Seller.aggregate([
+      { $match: sellerMatch },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'user',
+          foreignField: '_id',
+          as: 'user'
+        }
+      },
+      { $unwind: '$user' },
+      {
+        $lookup: {
+          from: 'listings',
+          let: { sellerEmail: '$user.email' },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ['$sellerEmail', '$$sellerEmail'] },
+                status: 'active',
+                isActive: true
+              }
+            },
+            {
+              $group: {
+                _id: null,
+                totalViews: { $sum: '$views' },
+                totalSales: { $sum: '$sales' },
+                itemCount: { $sum: 1 }
+              }
+            }
+          ],
+          as: 'listingStats'
+        }
+      },
+      {
+        $unwind: {
+          path: '$listingStats',
+          preserveNullAndEmptyArrays: true
+        }
+      },
+      {
+        $addFields: {
+          totalViews: { $ifNull: ['$listingStats.totalViews', 0] },
+          totalSales: { $ifNull: ['$listingStats.totalSales', 0] },
+          itemCount: { $ifNull: ['$listingStats.itemCount', 0] }
+        }
+      },
+      { $match: { itemCount: { $gt: 0 } } },
+      {
+        $sort: {
+          totalViews: -1,
+          totalSales: -1,
+          rating: -1,
+          createdAt: -1
+        }
+      },
+      { $limit: Number(limit) }
+    ]);
 
     res.json({ success: true, data: sellers });
   } catch (error) {
