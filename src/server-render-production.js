@@ -468,10 +468,14 @@ app.use((err, req, res, next) => {
 });
 
 // ==================== SERVER START ====================
-const startServer = async () => {
+
+// Connect to MongoDB in the background with retry. A failed DB connection must
+// NOT crash the process — the HTTP server stays up so /health and CORS keep
+// responding, instead of the whole app becoming unreachable ("can't connect to
+// server"). Mongoose auto-uses the connection once it succeeds.
+const connectMongoWithRetry = async (attempt = 1) => {
   try {
-    // Connect to MongoDB
-    console.log(`[${new Date().toISOString()}] 📚 Connecting to MongoDB...`);
+    console.log(`[${new Date().toISOString()}] 📚 Connecting to MongoDB (attempt ${attempt})...`);
     await mongoose.connect(MONGO_URI, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
@@ -479,41 +483,45 @@ const startServer = async () => {
       socketTimeoutMS: 45000,
     });
     console.log(`[${new Date().toISOString()}] ✅ MongoDB connected`);
-
-    // Start HTTP server
-    server.listen(PORT, '0.0.0.0', () => {
-      console.log(`\n${'='.repeat(50)}`);
-      console.log(`🚀 UniMart Backend Server Started`);
-      console.log(`${'='.repeat(50)}`);
-      console.log(`📡 Port: ${PORT}`);
-      console.log(`🌍 Environment: ${NODE_ENV}`);
-      console.log(`🔗 URL: http://0.0.0.0:${PORT}`);
-      console.log(`💬 WebSocket: ws://0.0.0.0:${PORT}/socket.io/`);
-      console.log(`🏥 Health Check: http://0.0.0.0:${PORT}/health`);
-      console.log(`${'='.repeat(50)}\n`);
-
-      // Store io instance on app
-      app.set('io', io);
-      app.set('socketUsers', socketUsers);
-    });
-
-    // Handle server errors
-    server.on('error', (err) => {
-      if (err.code === 'EADDRINUSE') {
-        console.error(`❌ Port ${PORT} is already in use`);
-      } else {
-        console.error(`❌ Server error: ${err.message}`);
-      }
-      process.exit(1);
-    });
-
   } catch (error) {
-    console.error(`[${new Date().toISOString()}] ❌ Failed to start server:`, error.message);
-    if (error.name === 'MongoServerError') {
-      console.error('MongoDB Error - check MONGO_URI in .env file');
-    }
-    process.exit(1);
+    const delay = Math.min(30000, 5000 * attempt);
+    console.error(`[${new Date().toISOString()}] ❌ MongoDB connection failed (attempt ${attempt}) — check MONGO_URI / Atlas IP allowlist:`, error.message);
+    console.error(`[${new Date().toISOString()}] ⏳ Retrying MongoDB connection in ${delay / 1000}s (server stays up)`);
+    setTimeout(() => connectMongoWithRetry(attempt + 1), delay);
   }
+};
+
+const startServer = () => {
+  // Bind the HTTP server first so the app is reachable even before (or without)
+  // a MongoDB connection.
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`\n${'='.repeat(50)}`);
+    console.log(`🚀 UniMart Backend Server Started`);
+    console.log(`${'='.repeat(50)}`);
+    console.log(`📡 Port: ${PORT}`);
+    console.log(`🌍 Environment: ${NODE_ENV}`);
+    console.log(`🔗 URL: http://0.0.0.0:${PORT}`);
+    console.log(`💬 WebSocket: ws://0.0.0.0:${PORT}/socket.io/`);
+    console.log(`🏥 Health Check: http://0.0.0.0:${PORT}/health`);
+    console.log(`${'='.repeat(50)}\n`);
+
+    // Store io instance on app
+    app.set('io', io);
+    app.set('socketUsers', socketUsers);
+  });
+
+  // Handle server errors
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`❌ Port ${PORT} is already in use`);
+      process.exit(1);
+    } else {
+      console.error(`❌ Server error: ${err.message}`);
+    }
+  });
+
+  // Kick off the MongoDB connection in the background.
+  connectMongoWithRetry();
 };
 
 // Handle unhandled rejections. Do NOT exit the process: killing the server on
