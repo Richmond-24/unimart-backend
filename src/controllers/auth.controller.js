@@ -2,6 +2,7 @@ const User = require('../models/User.model');
 const Seller = require('../models/Seller.model');
 const VerificationToken = require('../models/VerificationToken');
 const crypto = require('crypto');
+const { sendVerificationEmail, sendWelcomeEmail } = require('../utils/emailService');
 
 // Helper: send token response
 const sendToken = (user, statusCode, res) => {
@@ -117,7 +118,6 @@ exports.register = async (req, res, next) => {
 
     console.log('✅ User created successfully:', { _id: user._id, email: user.email });
 
-<<<<<<< HEAD
     // For now: do NOT create verification tokens or send OTPs.
     // Immediately mark user as verified.
     try {
@@ -125,15 +125,6 @@ exports.register = async (req, res, next) => {
       await user.save();
     } catch (verifyErr) {
       console.error('❌ Failed to set verified flag:', verifyErr);
-=======
-    // For now: do NOT use SMTP or welcome email sending.
-    try {
-      user.isVerified = true;
-      await user.save();
-      console.log('✅ User marked verified without SMTP welcome email');
-    } catch (verifyErr) {
-      console.error('❌ Failed to mark user verified:', verifyErr);
->>>>>>> dca8b7d (Add Windsurf IDE configuration)
     }
 
     // Send welcome email in the background. Never await it: SMTP can be slow
