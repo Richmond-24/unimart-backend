@@ -128,9 +128,17 @@ exports.register = async (req, res, next) => {
     }
 
     const firstName = (user.name || '').split(' ')[0] || '';
-    sendWelcomeEmail(user.email, firstName)
-      .then((sent) => console.log(`📧 Welcome email ${sent ? 'sent' : 'failed'} for user: ${user.email}`))
-      .catch((emailErr) => console.error('❌ Failed to send welcome email:', emailErr));
+    // Fire-and-forget sending to avoid delaying signup response.
+    // Wrap in setImmediate so any synchronous transporter init doesn't affect response.
+    try {
+      setImmediate(() => {
+        sendWelcomeEmail(user.email, firstName)
+          .then((sent) => console.log(`📧 Welcome email ${sent ? 'sent' : 'failed'} for user: ${user.email}`))
+          .catch((emailErr) => console.error('❌ Failed to send welcome email:', emailErr));
+      });
+    } catch (e) {
+      console.error('❌ Error scheduling welcome email send:', e);
+    }
 
     // Auto-create seller profile if role is seller
     if (user.role === 'seller') {
