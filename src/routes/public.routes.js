@@ -1,4 +1,3 @@
-
 // /home/richmond/Downloads/Uni-Mart/unimart-backend/src/routes/public.routes.js
 
 const express = require('express');
@@ -6,6 +5,7 @@ const router = express.Router();
 const Listing = require('../models/Listing');
 const Category = require('../models/Category.model');
 const Seller = require('../models/Seller.model');
+const User = require('../models/User.model');
 const { authMiddleware, optionalAuthMiddleware } = require('../middleware/auth');
 
 // ==================== CATEGORY-SPECIFIC ENDPOINTS ====================
@@ -390,12 +390,30 @@ router.get('/trending', async (req, res) => {
 // 📱 General listings endpoint (with category filter)
 router.get('/listings', async (req, res) => {
   try {
-    const { page = 1, limit = 20, category, search } = req.query;
+    const { page = 1, limit = 20, category, search, sellerId, sellerEmail, sellerName } = req.query;
 
     const query = { status: 'active', isActive: true };
     
     if (category && category !== 'all') {
       query.category = category;
+    }
+
+    if (sellerEmail) {
+      query.sellerEmail = String(sellerEmail).toLowerCase().trim();
+    } else if (sellerId) {
+      const resolvedUser = await User.findById(sellerId).select('email').lean().catch(() => null);
+      if (resolvedUser?.email) {
+        query.sellerEmail = resolvedUser.email;
+      } else {
+        query.$or = [
+          { sellerName: new RegExp(String(sellerId), 'i') },
+          { sellerEmail: String(sellerId) }
+        ];
+      }
+    }
+
+    if (sellerName) {
+      query.sellerName = new RegExp(String(sellerName), 'i');
     }
     
     if (search) {
