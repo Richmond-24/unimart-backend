@@ -13,3 +13,15 @@ services:
         value: production
       - key: FRONTEND_URL
         value: https://unimart-app-kappa.vercel.app
+      - key: EMAIL_SERVICE
+        value: gmail
+      - key: EMAIL_USER
+        value: a76424829@gmail.com
+      - key: EMAIL_PASSWORD
+        sync: false
+      - key: EMAIL_FROM
+        value: noreply@unimart.com
+      - key: APP_URL
+        value: https://unimart-app-kappa.vercel.app
+      - key: ZAPIER_WEBHOOK_URL
+        sync: false

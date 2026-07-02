@@ -17,7 +17,8 @@ function getReqUserId(req) {
 // Create or get existing conversation
 router.post('/'
   , protect
-  , body('sellerId').isMongoId()
+  , body('sellerId').optional().isMongoId()
+  , body('sellerEmail').optional().isEmail()
   , body('productId').optional().isMongoId()
   , body('initialMessage').optional().isString().isLength({ min: 1 })
   , async (req, res) => {
@@ -26,24 +27,36 @@ router.post('/'
       if (!errors.isEmpty()) return res.status(400).json({ success: false, errors: errors.array() });
 
       const buyerId = getReqUserId(req);
-      const { sellerId, productId, initialMessage } = req.body;
+      const { sellerId, sellerEmail, productId, initialMessage } = req.body;
+      let resolvedSellerId = sellerId;
 
       if (!buyerId) return res.status(401).json({ success: false, message: 'Unauthorized' });
-      if (buyerId.toString() === sellerId) return res.status(400).json({ success: false, message: 'Buyer and seller cannot be the same' });
+      if (!sellerId && !sellerEmail) return res.status(400).json({ success: false, message: 'sellerId or sellerEmail is required' });
+
+      if (!resolvedSellerId && sellerEmail) {
+        const seller = await User.findOne({ email: String(sellerEmail).toLowerCase().trim() }).lean();
+        if (!seller) return res.status(404).json({ success: false, message: 'Seller not found' });
+        resolvedSellerId = seller._id.toString();
+      }
+      if (!mongoose.Types.ObjectId.isValid(resolvedSellerId)) {
+        return res.status(400).json({ success: false, message: 'Invalid seller identifier' });
+      }
+
+      if (buyerId.toString() === resolvedSellerId) return res.status(400).json({ success: false, message: 'Buyer and seller cannot be the same' });
 
       // Try to find existing conversation for this buyer/seller/product
-      const query = { participants: { $all: [mongoose.Types.ObjectId(buyerId), mongoose.Types.ObjectId(sellerId)] } };
+      const query = { participants: { $all: [mongoose.Types.ObjectId(buyerId), mongoose.Types.ObjectId(resolvedSellerId)] } };
       if (productId) query.product = mongoose.Types.ObjectId(productId);
 
       let convo = await Conversation.findOne(query).lean();
       if (!convo) {
         // Create conversation
         const buyer = await User.findById(buyerId).lean();
-        const seller = await User.findById(sellerId).lean();
+        const seller = await User.findById(resolvedSellerId).lean();
         const product = productId ? await Product.findById(productId).lean() : null;
 
         const convData = {
-          participants: [buyerId, sellerId],
+          participants: [buyerId, resolvedSellerId],
           product: productId || null,
           productName: product ? (product.name || '') : undefined,
           productImage: product ? (product.images && product.images[0]) : undefined,

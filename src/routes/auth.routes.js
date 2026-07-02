@@ -12,7 +12,7 @@ router.post('/guest-login', ctrl.guestLogin);
 router.post('/verify', ctrl.verifyEmail);
 router.post('/resend-verification', ctrl.resendVerification);
 router.post('/logout',      protect, ctrl.logout);
-router.get('/me',           protect, ctrl.getCurrentUser);
+router.get('/me',           protect, ctrl.getMe);
 router.put('/profile',      protect, ctrl.updateProfile);
 router.post('/change-password', protect, ctrl.changePassword);
 

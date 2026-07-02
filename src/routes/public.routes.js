@@ -502,7 +502,17 @@ router.get('/listings/:id', async (req, res) => {
     // Increment view count
     await listing.incrementViews();
 
-    res.json({ success: true, data: listing });
+    const result = listing.toObject();
+    try {
+      const sellerUser = await User.findOne({ email: String(listing.sellerEmail).toLowerCase().trim() }).select('_id').lean();
+      if (sellerUser) {
+        result.sellerId = sellerUser._id.toString();
+      }
+    } catch (err) {
+      console.debug('Unable to resolve sellerId for listing response:', err?.message || err);
+    }
+
+    res.json({ success: true, data: result });
   } catch (error) {
     console.error('Error fetching listing:', error);
     res.status(500).json({ success: false, error: error.message });
