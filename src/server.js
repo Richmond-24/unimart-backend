@@ -333,6 +333,9 @@ const startServer = async () => {
     server.headersTimeout = 120000;
     server.setTimeout(120000);
 
+    const Conversation = require('./models/Conversation');
+    const Notification = require('./models/Notification');
+
     // Step 3: Setup Socket.IO
     console.log('[Socket.IO] Configuring...');
     const io = new Server(server, {
@@ -467,6 +470,37 @@ const startServer = async () => {
 
           io.to(`conversation:${conversationId}`).emit('new_message', message);
           socket.emit('message_sent', { message, success: true });
+
+          (async () => {
+            try {
+              const conversation = await Conversation.findById(conversationId).lean();
+              if (!conversation || !Array.isArray(conversation.participants)) return;
+
+              const recipients = conversation.participants
+                .map((p) => String(p))
+                .filter((participantId) => participantId !== String(userId));
+
+              if (!recipients.length) return;
+
+              const textBody = String(text || 'You have a new message').slice(0, 140);
+              const notificationPromises = recipients.map((recipientId) =>
+                Notification.create({
+                  userId: recipientId,
+                  type: 'new_message',
+                  title: 'New message from a seller',
+                  body: textBody,
+                  data: { conversationId, sender: userId },
+                })
+              );
+
+              await Promise.all(notificationPromises);
+              recipients.forEach((recipientId) => {
+                io.to(`user:${recipientId}`).emit('notification_received', { count: 1, type: 'new_message', conversationId, sender: userId });
+              });
+            } catch (notifyErr) {
+              console.warn('Failed to create socket notification:', notifyErr?.message || notifyErr);
+            }
+          })();
         } catch (err) {
           socket.emit('error', { message: err.message });
         }

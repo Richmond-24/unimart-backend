@@ -75,11 +75,12 @@ const register = async (req, res) => {
 
     await user.save();
 
-    // Create a welcome notification/message for the new user (Early Bird badge)
+    // Create a welcome notification/message for the new user and badge summary.
     try {
       const nort = require('../routes/nortification');
       if (nort && typeof nort.createNotification === 'function') {
-        await nort.createNotification(user._id, 'new_message', '🎉 Welcome to UniMart!', `Thanks for joining — enjoy your Early Bird badge. Explore trusted campus sellers and enjoy your first-time perks!`, { badge: 'EARLY_BIRD' });
+        await nort.createNotification(user._id, 'system', '🎉 Welcome to UniMart!', `Thanks for joining — enjoy your Early Bird badge. Explore trusted campus sellers and enjoy your first-time perks!`, { badge: 'EARLY_BIRD' });
+        await nort.createNotification(user._id, 'badge_unlocked', 'You unlocked 2 badges!', 'You have earned Verified User and Early Bird badges. Verified means your account is trusted and ready for campus buying. Early Bird means you joined UniMart early and get special welcome perks.', { badges: ['VERIFIED_USER', 'EARLY_BIRD'] });
       }
     } catch (notifErr) {
       console.warn('Failed to create welcome notification:', notifErr?.message || notifErr);

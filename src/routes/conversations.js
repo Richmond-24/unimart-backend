@@ -211,12 +211,34 @@ router.post('/:id/sync', protect, param('id').isMongoId(), body('messages').isAr
     if (inserted.length) {
       // update conversation lastMessage and unread counts
       const last = inserted[inserted.length - 1];
-      const otherParticipant = conversation.participants.find(p => p.toString() !== String(last.sender));
+      const otherParticipants = conversation.participants.filter(p => p.toString() !== String(last.sender));
+
+      const incUpdate = {};
+      otherParticipants.forEach((participantId) => {
+        incUpdate[`unreadCount.${participantId}`] = inserted.length;
+      });
+
       await Conversation.findByIdAndUpdate(id, {
         lastMessage: { text: last.text, senderId: last.sender, timestamp: last.timestamp },
-        $inc: { [`unreadCount.${otherParticipant}`]: inserted.length },
+        ...Object.keys(incUpdate).length ? { $inc: incUpdate } : {},
         updatedAt: new Date()
       });
+
+      try {
+        const notifications = otherParticipants.map((participantId) => ({
+          userId: participantId,
+          type: 'new_message',
+          title: 'New message from a seller',
+          body: String(last.text || 'You have a new message').slice(0, 140),
+          data: { conversationId: id, sender: last.sender },
+        }));
+        if (notifications.length) {
+          const Notification = require('../models/Notification');
+          await Notification.insertMany(notifications);
+        }
+      } catch (notifyErr) {
+        console.warn('Failed to create conversation sync notification:', notifyErr?.message || notifyErr);
+      }
     }
 
     return res.json({ success: true, insertedCount: inserted.length });
