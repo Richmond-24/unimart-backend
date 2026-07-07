@@ -45,8 +45,8 @@ router.post('/'
       if (buyerId.toString() === resolvedSellerId) return res.status(400).json({ success: false, message: 'Buyer and seller cannot be the same' });
 
       // Try to find existing conversation for this buyer/seller/product
-      const query = { participants: { $all: [mongoose.Types.ObjectId(buyerId), mongoose.Types.ObjectId(resolvedSellerId)] } };
-      if (productId) query.product = mongoose.Types.ObjectId(productId);
+      const query = { participants: { $all: [new mongoose.Types.ObjectId(buyerId), new mongoose.Types.ObjectId(resolvedSellerId)] } };
+      if (productId) query.product = new mongoose.Types.ObjectId(productId);
 
       let convo = await Conversation.findOne(query).lean();
       if (!convo) {

@@ -80,7 +80,7 @@ exports.chat = async (req, res) => {
     // Save to database for learning
     const chatDoc = new RiriChat({
       userId,
-      conversationId: conversationId || mongoose.Types.ObjectId(),
+      conversationId: conversationId || new mongoose.Types.ObjectId(),
       messages: [
         ...formattedHistory.map((msg) => ({
           role: msg.role,
