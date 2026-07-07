@@ -127,6 +127,25 @@ exports.chat = async (req, res) => {
           servicesFound: services.length,
           foodFound: foods.length,
         },
+        // Return lightweight matched items for frontend suggestions (id, title, price, image, url)
+        matches: {
+          products: (products || []).slice(0, 5).map((p) => ({
+            id: p._id || p.id,
+            title: p.title || p.productName || 'Product',
+            price: p.price ?? null,
+            image: (p.imageUrls && p.imageUrls.length) ? p.imageUrls[0] : null,
+            url: `/listings/${p._id || p.id}`,
+          })),
+          services: (services || []).slice(0, 5).map((s) => ({
+            id: s._id || s.id,
+            title: s.title || s.name || 'Service',
+            price: s.price ?? null,
+            image: (s.imageUrls && s.imageUrls.length) ? s.imageUrls[0] : null,
+            url: `/services/${s._id || s.id}`,
+          })),
+        },
+        // Indicate when the assistant could not provide a confident answer
+        noAnswer: couldNotAnswer,
         tokens: llmResult.tokens,
         model: llmResult.model,
         chatId: chatDoc._id,
