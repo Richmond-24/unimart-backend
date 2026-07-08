@@ -7,9 +7,7 @@ const nodemailer = require('nodemailer');
 
 // Configure transporter based on environment
 const createTransporter = () => {
-  // Using Gmail (requires app-specific password)
-  // For production, use SendGrid, Mailgun, or AWS SES
-  
+  // Preferred providers
   if (process.env.EMAIL_SERVICE === 'gmail') {
     return nodemailer.createTransport({
       service: 'gmail',
@@ -37,6 +35,22 @@ const createTransporter = () => {
     });
   }
 
+  // Fallback to generic SMTP when SMTP_HOST and SMTP_USER are configured
+  if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
+    return nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT) || 587,
+      secure: process.env.SMTP_SECURE === 'true' || false,
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+      connectionTimeout: 5000,
+      greetingTimeout: 5000,
+      socketTimeout: 10000,
+    });
+  }
+
   // Default: Use test account (for development/testing)
   return nodemailer.createTransport({
     host: 'smtp.mailtrap.io',
@@ -57,6 +71,7 @@ const isEmailConfigured = () => {
   const service = process.env.EMAIL_SERVICE;
   if (service === 'gmail') return Boolean(process.env.EMAIL_USER && process.env.EMAIL_PASSWORD);
   if (service === 'sendgrid') return Boolean(process.env.SENDGRID_API_KEY);
+  if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) return true;
   return Boolean(process.env.MAILTRAP_USER && process.env.MAILTRAP_PASSWORD);
 };
 

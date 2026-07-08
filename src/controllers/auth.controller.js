@@ -1,8 +1,43 @@
+const axios = require('axios');
 const User = require('../models/User.model');
 const Seller = require('../models/Seller.model');
 const VerificationToken = require('../models/VerificationToken');
 const crypto = require('crypto');
 const { sendWelcomeEmail } = require('../utils/emailService');
+
+const normalizeUrl = (url) => {
+  if (!url || typeof url !== 'string') return '';
+  return url.trim().replace(/\/+$|\s+/g, '');
+};
+
+const notifyZapierSignup = async (user) => {
+  const zapierUrl = normalizeUrl(process.env.ZAPIER_WEBHOOK_URL);
+  if (!zapierUrl) {
+    console.log('No ZAPIER_WEBHOOK_URL configured; skipping Zapier signup notification');
+    return;
+  }
+
+  const names = (user.name || '').trim().split(/\s+/);
+  const firstName = names[0] || '';
+  const lastName = names.length > 1 ? names.slice(1).join(' ') : '';
+  const payload = {
+    id: String(user._id),
+    email: user.email,
+    name: user.name || '',
+    firstName,
+    lastName,
+    role: user.role || 'buyer',
+    signupAt: new Date().toISOString(),
+  };
+
+  const response = await axios.post(zapierUrl, payload, {
+    timeout: 7000,
+    headers: { 'Content-Type': 'application/json' },
+  });
+
+  console.log(`Zapier signup webhook sent for ${user.email}: ${response.status}`);
+  return response.data;
+};
 
 // Helper: send token response
 const sendToken = (user, statusCode, res) => {
@@ -128,16 +163,23 @@ exports.register = async (req, res, next) => {
     }
 
     const firstName = (user.name || '').split(' ')[0] || '';
-    // Fire-and-forget sending to avoid delaying signup response.
-    // Wrap in setImmediate so any synchronous transporter init doesn't affect response.
     try {
-      setImmediate(() => {
-        sendWelcomeEmail(user.email, firstName)
-          .then((sent) => console.log(`📧 Welcome email ${sent ? 'sent' : 'failed'} for user: ${user.email}`))
-          .catch((emailErr) => console.error('❌ Failed to send welcome email:', emailErr));
+      setImmediate(async () => {
+        try {
+          const sent = await sendWelcomeEmail(user.email, firstName);
+          console.log(`📧 Welcome email ${sent ? 'sent' : 'failed'} for user: ${user.email}`);
+        } catch (emailErr) {
+          console.error('❌ Failed to send welcome email:', emailErr);
+        }
+
+        try {
+          await notifyZapierSignup(user);
+        } catch (zapErr) {
+          console.warn('⚠️ Zapier signup webhook failed:', zapErr?.message || zapErr);
+        }
       });
     } catch (e) {
-      console.error('❌ Error scheduling welcome email send:', e);
+      console.error('❌ Error scheduling signup notifications:', e);
     }
 
     // Auto-create seller profile if role is seller

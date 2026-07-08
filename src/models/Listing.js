@@ -156,6 +156,12 @@ const listingSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  productId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Product',
+    index: true,
+    required: false,
+  },
   featured: { 
     type: Boolean, 
     default: false 

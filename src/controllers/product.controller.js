@@ -1,5 +1,63 @@
 
 const Product = require('../models/Product.model');
+const Listing = require('../models/Listing');
+const User = require('../models/User.model');
+const Category = require('../models/Category.model');
+
+const normalizeListingCategory = (categoryName) => {
+  if (!categoryName) return 'Other';
+  const normalized = String(categoryName).trim().toLowerCase();
+  if (normalized.includes('electronics') || normalized.includes('gadget')) return 'Tech Gadgets';
+  if (normalized.includes('fashion') || normalized.includes('apparel') || normalized.includes('clothing')) return 'Fashion';
+  if (normalized.includes('book')) return 'Books';
+  if (normalized.includes('food') || normalized.includes('meal') || normalized.includes('dining')) return 'Food';
+  if (normalized.includes('service')) return 'Services';
+  if (normalized.includes('event')) return 'Events';
+  if (normalized.includes('second') || normalized.includes('used') || normalized.includes('preowned')) return 'Second Hand';
+  if (normalized.includes('home') || normalized.includes('furniture')) return 'Home & Furniture';
+  if (normalized.includes('campus') || normalized.includes('college') || normalized.includes('university')) return 'Campus Life';
+  return 'Other';
+};
+
+const syncProductToListing = async (product) => {
+  try {
+    const seller = await User.findById(product.seller).lean();
+    const categoryDoc = await Category.findById(product.category).lean().catch(() => null);
+    const listingCategory = normalizeListingCategory(categoryDoc?.name || 'Other');
+
+    const payload = {
+      productId: product._id,
+      title: product.name,
+      description: product.description || '',
+      price: product.price || 0,
+      imageUrls: Array.isArray(product.images) ? product.images : [],
+      category: listingCategory,
+      sellerEmail: seller?.email || '',
+      sellerName: seller?.name || 'Unknown Seller',
+      sellerPhone: seller?.phone || '',
+      status: 'active',
+      isActive: true,
+      featured: false,
+      tags: [],
+      views: 0,
+      sales: 0,
+      approvedAt: new Date(),
+      createdAt: product.createdAt,
+      updatedAt: product.updatedAt,
+    };
+
+    const existingListing = await Listing.findOne({ productId: product._id });
+    if (existingListing) {
+      Object.assign(existingListing, payload);
+      return existingListing.save();
+    }
+
+    return Listing.create(payload);
+  } catch (err) {
+    console.error('Failed to sync approved product to listing:', err);
+    return null;
+  }
+};
 
 // Admin: approve product
 exports.approveProduct = async (req, res, next) => {
@@ -11,6 +69,9 @@ exports.approveProduct = async (req, res, next) => {
     product.approvedAt = new Date();
     product.approvedBy = req.user._id;
     await product.save();
+
+    await syncProductToListing(product);
+
     res.json({ success: true, message: 'Product approved', data: product });
   } catch (err) { next(err); }
 };
@@ -24,6 +85,14 @@ exports.rejectProduct = async (req, res, next) => {
     product.status = 'archived';
     if (req.body.reason) product.adminNotes = req.body.reason;
     await product.save();
+
+    const listing = await Listing.findOne({ productId: product._id });
+    if (listing) {
+      listing.isActive = false;
+      listing.status = 'archived';
+      await listing.save();
+    }
+
     res.json({ success: true, message: 'Product rejected', data: product });
   } catch (err) { next(err); }
 };
