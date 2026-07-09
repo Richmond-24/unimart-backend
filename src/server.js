@@ -246,6 +246,7 @@ try {
   app.use('/api/users', require('./routes/user.routes.js'));
   app.use('/api/products', require('./routes/product.routes.js'));
   app.use('/api/conversations', require('./routes/conversations.js'));
+  app.use('/api/messages', require('./routes/messages.routes.js'));
   app.use('/api/categories', require('./routes/category.routes.js'));
   app.use('/api/orders', require('./routes/order.routes.js'));
   app.use('/api/cart', require('./routes/cart.routes.js'));
@@ -463,31 +464,59 @@ const startServer = async () => {
             _id: `msg-${Date.now()}`,
             conversationId,
             sender: userId,
+            senderName: socket.userName || 'User',
             text,
             type,
             timestamp: new Date().toISOString()
           };
 
+          // Broadcast to all participants in the conversation
           io.to(`conversation:${conversationId}`).emit('new_message', message);
           socket.emit('message_sent', { message, success: true });
 
+          // Post-save async tasks (notifications, database persistence)
           (async () => {
             try {
-              const conversation = await Conversation.findById(conversationId).lean();
+              const conversation = await Conversation.findById(conversationId).populate('participants', '_id role').lean();
               if (!conversation || !Array.isArray(conversation.participants)) return;
 
+              // Identify seller and buyer from participants
+              const buyerId = String(conversation.buyer?.id || conversation.participants.find(p => String(p._id) !== String(userId))?._id);
+              const sellerId = String(conversation.seller?.id || conversation.participants.find(p => String(p._id) !== String(userId) && String(p._id) !== buyerId)?._id);
+              
+              // Emit seller-specific event if a buyer is messaging the seller
               const recipients = conversation.participants
-                .map((p) => String(p))
+                .map((p) => String(p._id || p))
                 .filter((participantId) => participantId !== String(userId));
 
-              if (!recipients.length) return;
+              if (recipients.length > 0) {
+                // Emit seller:new_message event to seller dashboard
+                recipients.forEach((recipientId) => {
+                  io.to(`user:${recipientId}`).emit('seller:new_message', {
+                    conversationId,
+                    message,
+                    from: 'buyer'
+                  });
+                });
 
+                // Also emit to conversation room
+                io.to(`conversation:${conversationId}`).emit('message_updated', {
+                  conversationId,
+                  message,
+                  read: false
+                });
+              }
+
+              // Create notifications
+              const sender = await User.findById(userId).lean();
+              const senderName = sender?.name || 'Someone';
+              
               const textBody = String(text || 'You have a new message').slice(0, 140);
               const notificationPromises = recipients.map((recipientId) =>
                 Notification.create({
                   userId: recipientId,
                   type: 'new_message',
-                  title: 'New message from a seller',
+                  title: `New message from ${senderName}`,
                   body: textBody,
                   data: { conversationId, sender: userId },
                 })
@@ -495,7 +524,13 @@ const startServer = async () => {
 
               await Promise.all(notificationPromises);
               recipients.forEach((recipientId) => {
-                io.to(`user:${recipientId}`).emit('notification_received', { count: 1, type: 'new_message', conversationId, sender: userId });
+                io.to(`user:${recipientId}`).emit('notification_received', { 
+                  count: 1, 
+                  type: 'new_message', 
+                  conversationId, 
+                  sender: userId,
+                  senderName
+                });
               });
             } catch (notifyErr) {
               console.warn('Failed to create socket notification:', notifyErr?.message || notifyErr);
