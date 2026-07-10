@@ -7,13 +7,16 @@ const nodemailer = require('nodemailer');
 
 // Configure transporter based on environment
 const createTransporter = () => {
+  // Helper: Gmail App Passwords are displayed with spaces but must be sent without them.
+  const sanitizePassword = (pw) => (pw || '').replace(/\s+/g, '');
+
   // Preferred providers
   if (process.env.EMAIL_SERVICE === 'gmail') {
     return nodemailer.createTransport({
       service: 'gmail',
       auth: {
         user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASSWORD,
+        pass: sanitizePassword(process.env.EMAIL_PASSWORD),
       },
       connectionTimeout: 5000,
       greetingTimeout: 5000,
@@ -43,7 +46,7 @@ const createTransporter = () => {
       secure: process.env.SMTP_SECURE === 'true' || false,
       auth: {
         user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
+        pass: sanitizePassword(process.env.SMTP_PASS),
       },
       connectionTimeout: 5000,
       greetingTimeout: 5000,

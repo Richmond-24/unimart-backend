@@ -73,7 +73,7 @@ const sendMessage = async (req, res) => {
     try {
       const sender = await User.findById(senderId).lean();
       const senderName = sender?.name || 'Someone';
-      
+
       const notificationPromises = otherParticipants.map(recipientId =>
         Notification.create({
           userId: recipientId,
@@ -85,6 +85,37 @@ const sendMessage = async (req, res) => {
       );
 
       await Promise.all(notificationPromises);
+
+      // Emit real-time Socket.IO events so both sides update instantly
+      try {
+        const io = req.app?.get?.('io');
+        if (io) {
+          // Broadcast to all participants in the conversation room
+          io.to(`conversation:${conversationId}`).emit('new_message', {
+            ...populatedMessage.toObject ? populatedMessage.toObject() : populatedMessage,
+            conversationId,
+          });
+
+          // Emit per-user events for dashboard/notification updates
+          const fromRole = String(senderId) === String(conversation.seller?.id) ? 'seller' : 'buyer';
+          otherParticipants.forEach(recipientId => {
+            io.to(`user:${recipientId}`).emit('seller:new_message', {
+              conversationId,
+              message: populatedMessage.toObject ? populatedMessage.toObject() : populatedMessage,
+              from: fromRole,
+            });
+            io.to(`user:${recipientId}`).emit('notification_received', {
+              count: 1,
+              type: 'new_message',
+              conversationId,
+              sender: senderId,
+              senderName,
+            });
+          });
+        }
+      } catch (socketErr) {
+        console.warn('⚠️ Failed to emit socket event:', socketErr?.message || socketErr);
+      }
     } catch (notifyErr) {
       console.warn('Failed to create notifications:', notifyErr?.message);
     }

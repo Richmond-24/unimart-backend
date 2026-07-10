@@ -28,14 +28,18 @@ const notifyZapierSignup = async (user) => {
     lastName,
     role: user.role || 'buyer',
     signupAt: new Date().toISOString(),
+    // Tell the Zapier Zap to send the welcome email
+    welcomeEmailRequired: true,
+    university: user.university || '',
   };
 
+  console.log(`📨 Sending Zapier signup webhook for ${user.email}...`);
   const response = await axios.post(zapierUrl, payload, {
     timeout: 7000,
     headers: { 'Content-Type': 'application/json' },
   });
 
-  console.log(`Zapier signup webhook sent for ${user.email}: ${response.status}`);
+  console.log(`✅ Zapier signup webhook sent for ${user.email}: ${response.status}`);
   return response.data;
 };
 
@@ -46,15 +50,15 @@ const sendToken = (user, statusCode, res) => {
     success: true,
     token,
     user: {
-      _id:        user._id,
-      name:       user.name,
-      email:      user.email,
-      phone:      user.phone,
-      avatar:     user.avatar,
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      avatar: user.avatar,
       university: user.university,
-      studentId:  user.studentId,
+      studentId: user.studentId,
       department: user.department,
-      role:       user.role,
+      role: user.role,
       isVerified: user.isVerified,
     },
   });
@@ -101,9 +105,9 @@ exports.register = async (req, res, next) => {
     // Validate required fields
     if (!name || !email || !password) {
       console.log('❌ Missing required fields:', { name: !!name, email: !!email, password: !!password });
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Name, email, and password are required' 
+      return res.status(400).json({
+        success: false,
+        message: 'Name, email, and password are required'
       });
     }
 
@@ -127,17 +131,17 @@ exports.register = async (req, res, next) => {
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       console.log('❌ Email already exists:', email);
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Email already registered' 
+      return res.status(400).json({
+        success: false,
+        message: 'Email already registered'
       });
     }
 
     // Normalize and create new user
-    const user = await User.create({ 
-      name, 
-      email, 
-      password, 
+    const user = await User.create({
+      name,
+      email,
+      password,
       phone: String(phone).trim(),
       university: String(university).trim(),
       studentId: String(studentId).trim(),
@@ -165,17 +169,19 @@ exports.register = async (req, res, next) => {
     const firstName = (user.name || '').split(' ')[0] || '';
     try {
       setImmediate(async () => {
-        try {
-          const sent = await sendWelcomeEmail(user.email, firstName);
-          console.log(`📧 Welcome email ${sent ? 'sent' : 'failed'} for user: ${user.email}`);
-        } catch (emailErr) {
-          console.error('❌ Failed to send welcome email:', emailErr);
-        }
-
+        // Fire Zapier webhook FIRST — it's the primary welcome-email trigger
         try {
           await notifyZapierSignup(user);
         } catch (zapErr) {
           console.warn('⚠️ Zapier signup webhook failed:', zapErr?.message || zapErr);
+        }
+
+        // SMTP welcome email as fallback (may fail if Gmail App Password is expired)
+        try {
+          const sent = await sendWelcomeEmail(user.email, firstName);
+          console.log(`📧 Welcome email ${sent ? 'sent' : 'skipped (no SMTP)'} for user: ${user.email}`);
+        } catch (emailErr) {
+          console.error('❌ Failed to send welcome email via SMTP:', emailErr?.message || emailErr);
         }
       });
     } catch (e) {
@@ -205,7 +211,7 @@ exports.register = async (req, res, next) => {
       code: err.code,
       errors: err.errors,
     });
-    next(err); 
+    next(err);
   }
 };
 
@@ -219,7 +225,7 @@ exports.verifyEmail = async (req, res, next) => {
     const vt = await VerificationToken.findOne({ token });
     if (!vt) return res.status(400).json({ success: false, message: 'Invalid or expired token' });
     if (vt.expiresAt < new Date()) {
-      await VerificationToken.deleteMany({ user: vt.user }).catch(()=>{});
+      await VerificationToken.deleteMany({ user: vt.user }).catch(() => { });
       return res.status(400).json({ success: false, message: 'Token has expired' });
     }
 
@@ -230,7 +236,7 @@ exports.verifyEmail = async (req, res, next) => {
     await user.save();
 
     // remove tokens for this user
-    await VerificationToken.deleteMany({ user: user._id }).catch(()=>{});
+    await VerificationToken.deleteMany({ user: user._id }).catch(() => { });
 
     // SMTP disabled for verification completion.
     console.log('✅ Email verification completed without SMTP send for', user.email);
@@ -251,7 +257,7 @@ exports.resendVerification = async (req, res, next) => {
     if (user.isVerified) return res.status(400).json({ success: false, message: 'Account already verified' });
 
     // Delete old tokens
-    await VerificationToken.deleteMany({ user: user._id }).catch(()=>{});
+    await VerificationToken.deleteMany({ user: user._id }).catch(() => { });
 
     // Create and send new token
     const token = crypto.randomBytes(32).toString('hex');
@@ -273,44 +279,44 @@ exports.resendVerification = async (req, res, next) => {
 exports.login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
-    
+
     console.log('📝 Login request received:', { email: email?.substring(0, 5) + '***', hasPassword: !!password });
-    
+
     // Validate email format
     if (!email || typeof email !== 'string' || !email.includes('@')) {
       console.log('❌ Invalid email format');
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Please enter a valid email address' 
+      return res.status(400).json({
+        success: false,
+        message: 'Please enter a valid email address'
       });
     }
 
     // Validate password is provided and has minimum length
     if (!password || typeof password !== 'string') {
       console.log('❌ Missing password');
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Please enter your password' 
+      return res.status(400).json({
+        success: false,
+        message: 'Please enter your password'
       });
     }
 
     if (password.length < 6) {
       console.log('❌ Password too short');
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Password must be at least 6 characters' 
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 6 characters'
       });
     }
 
     // Find user and include password
     const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
-    
+
     // Check if user exists
     if (!user) {
       console.log('❌ Login failed for email:', email);
-      return res.status(401).json({ 
-        success: false, 
-        message: 'Email or password is incorrect. Please check and try again.' 
+      return res.status(401).json({
+        success: false,
+        message: 'Email or password is incorrect. Please check and try again.'
       });
     }
 
@@ -320,35 +326,35 @@ exports.login = async (req, res, next) => {
       passwordMatch = await user.matchPassword(password);
     } catch (pwErr) {
       console.error('❌ Password comparison error:', pwErr.message);
-      return res.status(500).json({ 
-        success: false, 
-        message: 'Authentication service error. Please try again.' 
+      return res.status(500).json({
+        success: false,
+        message: 'Authentication service error. Please try again.'
       });
     }
 
     if (!passwordMatch) {
       console.log('❌ Login failed for email:', email);
-      return res.status(401).json({ 
-        success: false, 
-        message: 'Email or password is incorrect. Please check and try again.' 
+      return res.status(401).json({
+        success: false,
+        message: 'Email or password is incorrect. Please check and try again.'
       });
     }
 
     // Check if account is banned
     if (user.isBanned) {
       console.log('❌ User account banned:', email);
-      return res.status(403).json({ 
-        success: false, 
-        message: 'This account has been suspended. Contact support for assistance.' 
+      return res.status(403).json({
+        success: false,
+        message: 'This account has been suspended. Contact support for assistance.'
       });
     }
 
     // Check if account is active
     if (!user.isActive) {
       console.log('❌ User account inactive:', email);
-      return res.status(403).json({ 
-        success: false, 
-        message: 'This account is not active. Please contact support.' 
+      return res.status(403).json({
+        success: false,
+        message: 'This account is not active. Please contact support.'
       });
     }
 
@@ -369,7 +375,7 @@ exports.login = async (req, res, next) => {
       code: err.code,
       stack: err.stack
     });
-    next(err); 
+    next(err);
   }
 };
 
@@ -449,7 +455,7 @@ exports.logout = async (req, res, next) => {
 exports.updateProfile = async (req, res, next) => {
   try {
     const updates = {};
-    const allowed = ['name','phone','avatar','university','studentId','department','bio'];
+    const allowed = ['name', 'phone', 'avatar', 'university', 'studentId', 'department', 'bio'];
     for (const k of allowed) if (req.body[k] !== undefined) updates[k] = req.body[k];
     const user = await User.findByIdAndUpdate(req.user._id, updates, { new: true, runValidators: true });
     res.json({ success: true, data: user });
