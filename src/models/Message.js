@@ -8,6 +8,9 @@ const MessageSchema = new Schema({
   text: { type: String, required: true },
   type: { type: String, enum: ['text', 'image', 'offer', 'system'], default: 'text' },
   imageUrl: { type: String },
+  // Delivery & read status
+  delivered: { type: Boolean, default: false },
+  deliveredAt: { type: Date },
   read: { type: Boolean, default: false },
   readAt: { type: Date },
   timestamp: { type: Date, default: Date.now, index: true },

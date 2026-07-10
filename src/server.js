@@ -455,85 +455,100 @@ const startServer = async () => {
 
       socket.on('send_message', (data) => {
         try {
-          const { conversationId, text, type = 'text' } = data;
+          const { conversationId, text, type = 'text', firebaseId } = data;
           if (!conversationId || !text) {
             return socket.emit('error', { message: 'Invalid message data' });
           }
 
-          const message = {
-            _id: `msg-${Date.now()}`,
-            conversationId,
-            sender: userId,
-            senderName: socket.userName || 'User',
-            text,
-            type,
-            timestamp: new Date().toISOString()
-          };
-
-          // Broadcast to all participants in the conversation
-          io.to(`conversation:${conversationId}`).emit('new_message', message);
-          socket.emit('message_sent', { message, success: true });
-
-          // Post-save async tasks (notifications, database persistence)
+          // Persist message to database and emit the saved message
           (async () => {
             try {
-              const conversation = await Conversation.findById(conversationId).populate('participants', '_id role').lean();
-              if (!conversation || !Array.isArray(conversation.participants)) return;
+              const Message = require('./models/Message');
 
-              // Identify seller and buyer from participants
-              const buyerId = String(conversation.buyer?.id || conversation.participants.find(p => String(p._id) !== String(userId))?._id);
-              const sellerId = String(conversation.seller?.id || conversation.participants.find(p => String(p._id) !== String(userId) && String(p._id) !== buyerId)?._id);
-              
-              // Emit seller-specific event if a buyer is messaging the seller
-              const recipients = conversation.participants
-                .map((p) => String(p._id || p))
-                .filter((participantId) => participantId !== String(userId));
-
-              if (recipients.length > 0) {
-                // Emit seller:new_message event to seller dashboard
-                recipients.forEach((recipientId) => {
-                  io.to(`user:${recipientId}`).emit('seller:new_message', {
-                    conversationId,
-                    message,
-                    from: 'buyer'
-                  });
-                });
-
-                // Also emit to conversation room
-                io.to(`conversation:${conversationId}`).emit('message_updated', {
-                  conversationId,
-                  message,
-                  read: false
-                });
+              // Deduplicate by firebaseId if provided
+              let existing = null;
+              if (firebaseId) {
+                existing = await Message.findOne({ firebaseId, conversation: conversationId }).lean();
               }
 
-              // Create notifications
-              const sender = await User.findById(userId).lean();
-              const senderName = sender?.name || 'Someone';
-              
-              const textBody = String(text || 'You have a new message').slice(0, 140);
-              const notificationPromises = recipients.map((recipientId) =>
-                Notification.create({
-                  userId: recipientId,
-                  type: 'new_message',
-                  title: `New message from ${senderName}`,
-                  body: textBody,
-                  data: { conversationId, sender: userId },
-                })
-              );
+              if (existing) {
+                // Already saved, emit it back
+                io.to(`conversation:${conversationId}`).emit('new_message', existing);
+                socket.emit('message_sent', { message: existing, success: true });
+                return;
+              }
 
-              await Promise.all(notificationPromises);
-              recipients.forEach((recipientId) => {
-                io.to(`user:${recipientId}`).emit('notification_received', { 
-                  count: 1, 
-                  type: 'new_message', 
-                  conversationId, 
-                  sender: userId,
-                  senderName
-                });
+              const newMsg = new Message({
+                conversation: conversationId,
+                sender: userId,
+                text: String(text).trim(),
+                type,
+                timestamp: new Date(),
+                firebaseId: firebaseId || undefined,
+                delivered: true,
+                deliveredAt: new Date(),
+                read: false
               });
-            } catch (notifyErr) {
-              console.warn('Failed to create socket notification:', notifyErr?.message || notifyErr);
+
+              const saved = await newMsg.save();
+              const populated = await Message.findById(saved._id).populate('sender', 'name photoURL email role').lean();
+
+              // Update conversation lastMessage and unread counts
+              try {
+                const conversation = await Conversation.findById(conversationId);
+                if (conversation) {
+                  const participantIds = (conversation.participants || []).map(p => String(p));
+                  const otherParticipants = participantIds.filter(p => p !== String(userId));
+                  const incUpdate = {};
+                  otherParticipants.forEach(pid => { incUpdate[`unreadCount.${pid}`] = 1; });
+
+                  await Conversation.findByIdAndUpdate(conversationId, {
+                    lastMessage: {
+                      text: saved.text,
+                      senderId: saved.sender,
+                      timestamp: saved.timestamp
+                    },
+                    ...(Object.keys(incUpdate).length > 0 && { $inc: incUpdate }),
+                    updatedAt: new Date()
+                  });
+                }
+              } catch (convErr) {
+                console.warn('Failed to update conversation after socket save:', convErr?.message || convErr);
+              }
+
+              // Emit to conversation room and ack sender
+              io.to(`conversation:${conversationId}`).emit('new_message', populated);
+              socket.emit('message_sent', { message: populated, success: true });
+
+              // Notify other participants and dashboard
+              try {
+                const conversation = await Conversation.findById(conversationId).populate('participants', '_id role').lean();
+                if (conversation) {
+                  const recipients = (conversation.participants || []).map(p => String(p._id || p)).filter(id => id !== String(userId));
+                  const sender = await User.findById(userId).lean();
+                  const senderName = sender?.name || 'Someone';
+
+                  recipients.forEach((recipientId) => {
+                    io.to(`user:${recipientId}`).emit('seller:new_message', {
+                      conversationId,
+                      message: populated,
+                      from: conversation.seller && String(conversation.seller.id) === String(recipientId) ? 'buyer' : 'buyer'
+                    });
+                    io.to(`user:${recipientId}`).emit('notification_received', {
+                      count: 1,
+                      type: 'new_message',
+                      conversationId,
+                      sender: userId,
+                      senderName
+                    });
+                  });
+                }
+              } catch (notifyErr) {
+                console.warn('Failed to emit per-user notifications after socket save:', notifyErr?.message || notifyErr);
+              }
+            } catch (errInner) {
+              console.error('Socket send_message persistence error:', errInner);
+              socket.emit('error', { message: 'Failed to save message' });
             }
           })();
         } catch (err) {
