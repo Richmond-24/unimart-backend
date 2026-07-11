@@ -578,6 +578,22 @@ const startServer = async () => {
         }
       });
 
+      // Mark messages as read (client notifies server to broadcast read state)
+      socket.on('messages_read', (data) => {
+        try {
+          const { conversationId, messageIds } = data || {};
+          if (!conversationId) return;
+          // Broadcast to the conversation room that messages were read by this user
+          io.to(`conversation:${conversationId}`).emit('messages_read', {
+            conversationId,
+            messageIds: Array.isArray(messageIds) ? messageIds : undefined,
+            userId
+          });
+        } catch (err) {
+          console.error('messages_read handler error:', err?.message || err);
+        }
+      });
+
       // ========== HEARTBEAT ==========
 
       socket.on('ping', () => {
