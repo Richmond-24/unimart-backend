@@ -272,6 +272,9 @@ loadRoute('/api/sellers', './routes/seller.routes.js');
 loadRoute('/api/reviews', './routes/review.routes.js');
 loadRoute('/api/notifications', './routes/nortification.js');
 
+// ⭐ PAYMENT ROUTES ⭐
+loadRoute('/api/payments', './routes/payment.routes.js');
+
 // OPTIONAL - Skip if credentials missing
 // loadRoute('/api/riri', './routes/riri.routes.js');
 // loadRoute('/api/chat/assistant', './routes/assistant.js');
