@@ -28,12 +28,13 @@ const PORT = Number(process.env.PORT || 5000);
 const NODE_ENV = process.env.NODE_ENV || 'production';
 const MONGO_URI = (process.env.MONGO_URI || 'mongodb://localhost:27017/unimart').trim();
 const JWT_SECRET = (process.env.JWT_SECRET || 'unimart-secret-key').trim();
-const FRONTEND_URL = (process.env.FRONTEND_URL || 'https://unimart-app-kappa.vercel.app').trim();
+const FRONTEND_URL = (process.env.FRONTEND_URL || 'https://unimartapp-phi.vercel.app').trim();
 
 // Build allowed origins list - MUST include Vercel frontend and local dev origins
 const ALLOWED_ORIGINS = Array.from(new Set([
   FRONTEND_URL,
-  'https://unimart-app-kappa.vercel.app',
+  'https://unimartapp-phi.vercel.app',
+  'https://unimart-app-kappa.vercel.app', // Keep for backward compatibility
   'http://localhost:3000',
   'http://localhost:3001',
   'http://127.0.0.1:3000',
@@ -236,42 +237,57 @@ app.get('/', (req, res) => {
 });
 
 // ============================================
-// API ROUTES
+// API ROUTES - WITH INDIVIDUAL ERROR HANDLING
 // ============================================
 
-try {
-  app.use('/api/auth', require('./routes/auth.routes.js'));
+console.log('📦 Loading routes...');
 
-  // All other API routes
-  app.use('/api/users', require('./routes/user.routes.js'));
-  app.use('/api/products', require('./routes/product.routes.js'));
-  app.use('/api/conversations', require('./routes/conversations.js'));
-  app.use('/api/messages', require('./routes/messages.routes.js'));
-  app.use('/api/categories', require('./routes/category.routes.js'));
- // app.use('/api/orders', require('./routes/order.routes.js'));
-  app.use('/api/cart', require('./routes/cart.routes.js'));
-  app.use('/api/food', require('./routes/food.routes.js'));
-  app.use('/api/services', require('./routes/service.routes.js'));
-  app.use('/api/events', require('./routes/event.routes.js'));
-  app.use('/api/sellers', require('./routes/seller.routes.js'));
-  app.use('/api/reviews', require('./routes/review.routes.js'));
-  app.use('/api/notifications', require('./routes/nortification.js').router);
-  app.use('/api/riri', require('./routes/riri.routes.js'));
-  app.use('/api/home', require('./routes/home.routes.js'));
-  app.use('/api/public', require('./routes/public.routes.js'));
-  app.use('/api/listings', require('./routes/listings.js'));
-  app.use('/api/upload', require('./routes/upload.routes.js'));
-  app.use('/api/chat/assistant', require('./routes/assistant.js'));
-  app.use('/api/ai-agent', require('./routes/aiAgent.routes.js'));
-  app.use('/api/search', require('./routes/search-enhanced.js'));
-  app.use('/api', require('./routes/ai-search.routes.js'));
-  app.use('/api/product-notifications', require('./routes/productNotifications.js'));
-  app.use('/api/webhooks', require('./routes/webhooks.routes.js'));
+// Helper to load routes individually
+const loadRoute = (path, routePath) => {
+  try {
+    app.use(path, require(routePath));
+    console.log(`✅ ${path} loaded successfully`);
+  } catch (error) {
+    console.warn(`⚠️ ${path} skipped: ${error.message}`);
+  }
+};
 
-  console.log('✅ All API routes registered successfully');
-} catch (routeError) {
-  console.error('❌ Error registering routes:', routeError.message);
-}
+// Load essential routes first
+loadRoute('/api/auth', './routes/auth.routes.js');
+loadRoute('/api/users', './routes/user.routes.js');
+loadRoute('/api/products', './routes/product.routes.js');
+loadRoute('/api/conversations', './routes/conversations.js');
+loadRoute('/api/messages', './routes/messages.routes.js');
+loadRoute('/api/categories', './routes/category.routes.js');
+// loadRoute('/api/orders', './routes/order.routes.js'); // Disabled - missing model
+
+// Core functionality
+loadRoute('/api/cart', './routes/cart.routes.js');
+loadRoute('/api/food', './routes/food.routes.js');
+loadRoute('/api/services', './routes/service.routes.js');
+loadRoute('/api/events', './routes/event.routes.js');
+loadRoute('/api/sellers', './routes/seller.routes.js');
+loadRoute('/api/reviews', './routes/review.routes.js');
+loadRoute('/api/notifications', './routes/nortification.js');
+
+// OPTIONAL - May need credentials (comment out if they fail)
+// loadRoute('/api/riri', './routes/riri.routes.js'); // Needs Stream Chat
+// loadRoute('/api/chat/assistant', './routes/assistant.js'); // Needs Stream Chat
+// loadRoute('/api/ai-agent', './routes/aiAgent.routes.js'); // Needs Stream Chat
+
+// IMPORTANT - Public routes (MUST LOAD)
+loadRoute('/api/home', './routes/home.routes.js');
+loadRoute('/api/public', './routes/public.routes.js'); // ✅ This will load!
+loadRoute('/api/listings', './routes/listings.js');
+loadRoute('/api/upload', './routes/upload.routes.js');
+
+// Search and other features
+loadRoute('/api/search', './routes/search-enhanced.js');
+// loadRoute('/api', './routes/ai-search.routes.js'); // Disabled - conflicts with /api/
+loadRoute('/api/product-notifications', './routes/productNotifications.js');
+loadRoute('/api/webhooks', './routes/webhooks.routes.js');
+
+console.log('✅ All routes processed');
 
 // ============================================
 // 404 HANDLER
