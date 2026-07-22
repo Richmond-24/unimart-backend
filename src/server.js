@@ -248,7 +248,7 @@ try {
   app.use('/api/conversations', require('./routes/conversations.js'));
   app.use('/api/messages', require('./routes/messages.routes.js'));
   app.use('/api/categories', require('./routes/category.routes.js'));
-  app.use('/api/orders', require('./routes/order.routes.js'));
+ // app.use('/api/orders', require('./routes/order.routes.js'));
   app.use('/api/cart', require('./routes/cart.routes.js'));
   app.use('/api/food', require('./routes/food.routes.js'));
   app.use('/api/services', require('./routes/service.routes.js'));

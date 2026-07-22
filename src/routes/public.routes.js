@@ -240,7 +240,7 @@ router.get('/campus-trending', async (req, res) => {
   }
 });
 
-// � Top Sellers
+// 🏆 Top Sellers
 router.get('/top-sellers', async (req, res) => {
   try {
     const { limit = 10, university } = req.query;
@@ -335,7 +335,7 @@ router.get('/sellers', async (req, res) => {
   }
 });
 
-// �🔥 Flash Deals (items with discount)
+// 🔥 Flash Deals (items with discount)
 router.get('/flash-deals', async (req, res) => {
   try {
     const { limit = 10, page = 1 } = req.query;
@@ -693,6 +693,83 @@ router.get('/health', (req, res) => {
       '/categories/:category',
       '/listings/:id'
     ]
+  });
+});
+
+// ============================================
+// NEW ROUTES ADDED FOR FRONTEND COMPATIBILITY
+// ============================================
+
+// 📸 Hero Slides
+router.get('/hero-slides', async (req, res) => {
+  try {
+    // You can fetch these from a database or return static data
+    const heroSlides = [
+      {
+        id: 1,
+        image: '/images/hero-banner-1.jpg',
+        title: 'Welcome to UniMart',
+        subtitle: 'Your Campus Marketplace',
+        link: '/shop',
+        order: 1
+      },
+      {
+        id: 2,
+        image: '/images/hero-banner-2.jpg',
+        title: 'Student Deals',
+        subtitle: 'Exclusive discounts for students',
+        link: '/deals',
+        order: 2
+      },
+      {
+        id: 3,
+        image: '/images/hero-banner-3.jpg',
+        title: 'Sell Your Items',
+        subtitle: 'List your items for free',
+        link: '/sell',
+        order: 3
+      }
+    ];
+    
+    res.json({ success: true, data: heroSlides });
+  } catch (error) {
+    console.error('Error fetching hero slides:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 🔍 Debug route - to see all available endpoints
+router.get('/debug', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Public API is running',
+    version: '1.0.0',
+    availableEndpoints: [
+      '/health',
+      '/food',
+      '/services',
+      '/events',
+      '/tech-gadgets',
+      '/second-hand',
+      '/home-furniture',
+      '/campus-life',
+      '/campus-trending',
+      '/top-sellers',
+      '/sellers',
+      '/flash-deals',
+      '/trending',
+      '/listings',
+      '/search',
+      '/categories',
+      '/categories/:category',
+      '/listings/:id',
+      '/listings/:id/reactions',
+      '/listings/:id/vote (POST)',
+      '/listings/:id/emoji (POST)',
+      '/hero-slides',
+      '/debug'
+    ],
+    timestamp: new Date().toISOString()
   });
 });
 

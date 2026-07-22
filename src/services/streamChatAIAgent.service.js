@@ -21,7 +21,8 @@ class StreamChatAIAgentService {
     const apiSecret = process.env.STREAM_CHAT_API_SECRET;
 
     if (!apiKey || !apiSecret) {
-      throw new Error('Stream Chat credentials not configured');
+      console.warn('⚠️ Stream Chat credentials not configured - AI Agent service disabled');
+      return;
     }
 
     this.streamChat = new StreamChat(apiKey, apiSecret);
