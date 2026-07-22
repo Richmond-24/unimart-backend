@@ -298,18 +298,20 @@ loadRoute('/api/webhooks', './routes/webhooks.routes.js');
 // INLINE ORDER ROUTE (Simple implementation)
 // ============================================
 
-// Simple order creation endpoint
+// Simple order creation endpoint - FIXED WITH ID FIELD
 app.post('/api/orders', async (req, res) => {
   try {
     console.log('📦 Order received:', JSON.stringify(req.body, null, 2));
     
-    // Return success response
+    const orderId = 'order_' + Date.now();
+    
+    // Return success response with the format frontend expects
     res.status(201).json({
       success: true,
-      message: 'Order received successfully!',
-      orderId: 'order_' + Date.now(),
-      data: req.body,
-      status: 'pending'
+      id: orderId,           // ← Frontend needs this for order.id
+      orderId: orderId,      // ← Frontend also uses orderId
+      status: 'pending',
+      message: 'Order received successfully!'
     });
   } catch (error) {
     console.error('❌ Order error:', error);
