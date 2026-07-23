@@ -298,10 +298,10 @@ loadRoute('/api/events', './routes/event.routes.js');
 loadRoute('/api/sellers', './routes/seller.routes.js');
 loadRoute('/api/reviews', './routes/review.routes.js');
 
-// Notifications - handle with care
+// Notifications - FIXED import
 try {
-  const notificationRoute = require('./routes/nortification.js');
-  app.use('/api/notifications', notificationRoute.router || notificationRoute);
+  const notificationRoute = require('./routes/notification.routes.js');
+  app.use('/api/notifications', notificationRoute);
   console.log('✅ /api/notifications loaded successfully');
 } catch (error) {
   console.warn(`⚠️ /api/notifications skipped: ${error.message}`);
