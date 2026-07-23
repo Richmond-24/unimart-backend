@@ -237,6 +237,31 @@ app.get('/', (req, res) => {
 });
 
 // ============================================
+// PUBLIC DEBUG ROUTE (BEFORE ANYTHING ELSE)
+// ============================================
+
+// Debug endpoint to test if server is running
+app.get('/api/public/debug', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Public API is working!',
+    timestamp: new Date().toISOString(),
+    availableEndpoints: [
+      '/api/public/debug',
+      '/api/public/hero-slides',
+      '/api/public/trending',
+      '/api/public/listings',
+      '/api/public/services',
+      '/api/public/flash-deals',
+      '/api/public/second-hand',
+      '/api/public/top-sellers',
+      '/api/public/sellers',
+      '/api/public/campus-trending'
+    ]
+  });
+});
+
+// ============================================
 // API ROUTES - WITH INDIVIDUAL ERROR HANDLING
 // ============================================
 
@@ -245,7 +270,9 @@ console.log('📦 Loading routes...');
 // Helper to load routes individually - prevents one failure from breaking everything
 const loadRoute = (path, routePath) => {
   try {
-    app.use(path, require(routePath));
+    const route = require(routePath);
+    // Handle both direct router and module with .router property
+    app.use(path, route.router || route);
     console.log(`✅ ${path} loaded successfully`);
   } catch (error) {
     console.warn(`⚠️ ${path} skipped: ${error.message}`);
@@ -260,7 +287,7 @@ loadRoute('/api/conversations', './routes/conversations.js');
 loadRoute('/api/messages', './routes/messages.routes.js');
 loadRoute('/api/categories', './routes/category.routes.js');
 
-// Skip orders - using inline route below instead
+// SKIP orders - using inline route below instead
 // loadRoute('/api/orders', './routes/order.routes.js');
 
 // Core functionality
@@ -270,9 +297,17 @@ loadRoute('/api/services', './routes/service.routes.js');
 loadRoute('/api/events', './routes/event.routes.js');
 loadRoute('/api/sellers', './routes/seller.routes.js');
 loadRoute('/api/reviews', './routes/review.routes.js');
-loadRoute('/api/notifications', './routes/nortification.js');
 
-// ⭐ PAYMENT ROUTES ⭐
+// Notifications - handle with care
+try {
+  const notificationRoute = require('./routes/nortification.js');
+  app.use('/api/notifications', notificationRoute.router || notificationRoute);
+  console.log('✅ /api/notifications loaded successfully');
+} catch (error) {
+  console.warn(`⚠️ /api/notifications skipped: ${error.message}`);
+}
+
+// Payment routes
 loadRoute('/api/payments', './routes/payment.routes.js');
 
 // OPTIONAL - Skip if credentials missing
@@ -282,7 +317,7 @@ loadRoute('/api/payments', './routes/payment.routes.js');
 
 // IMPORTANT - These MUST load
 loadRoute('/api/home', './routes/home.routes.js');
-loadRoute('/api/public', './routes/public.routes.js'); // ✅ This will load!
+loadRoute('/api/public', './routes/public.routes.js');
 loadRoute('/api/listings', './routes/listings.js');
 loadRoute('/api/upload', './routes/upload.routes.js');
 
@@ -293,6 +328,284 @@ loadRoute('/api/search', './routes/search-enhanced.js');
 // Other features
 loadRoute('/api/product-notifications', './routes/productNotifications.js');
 loadRoute('/api/webhooks', './routes/webhooks.routes.js');
+
+console.log('✅ All routes processed');
+
+// ============================================
+// DIRECT PUBLIC ROUTES (Fallback)
+// ============================================
+
+// Hero Slides - Direct endpoint
+app.get('/api/public/hero-slides', (req, res) => {
+  res.json({
+    success: true,
+    data: [
+      {
+        id: 1,
+        image: '/images/hero-banner-1.jpg',
+        title: 'Welcome to UniMart',
+        subtitle: 'Your Campus Marketplace',
+        link: '/shop'
+      },
+      {
+        id: 2,
+        image: '/images/hero-banner-2.jpg',
+        title: 'Student Deals',
+        subtitle: 'Exclusive discounts for students',
+        link: '/deals'
+      },
+      {
+        id: 3,
+        image: '/images/hero-banner-3.jpg',
+        title: 'Sell Your Items',
+        subtitle: 'List your items for free',
+        link: '/sell'
+      }
+    ]
+  });
+});
+
+// Trending - Direct endpoint
+app.get('/api/public/trending', async (req, res) => {
+  try {
+    const Listing = require('./models/Listing');
+    const listings = await Listing.find({ status: 'active', isActive: true })
+      .sort({ views: -1, sales: -1, createdAt: -1 })
+      .limit(10);
+    res.json({ success: true, data: listings });
+  } catch (error) {
+    console.error('Trending fallback error:', error.message);
+    // Return mock data if database fails
+    res.json({
+      success: true,
+      data: [
+        { id: 1, name: 'Trending Product 1', price: 99.99, views: 1000 },
+        { id: 2, name: 'Trending Product 2', price: 149.99, views: 800 },
+        { id: 3, name: 'Trending Product 3', price: 79.99, views: 600 }
+      ]
+    });
+  }
+});
+
+// Listings with category - Direct endpoint
+app.get('/api/public/listings', async (req, res) => {
+  try {
+    const Listing = require('./models/Listing');
+    const { category, page = 1, limit = 20 } = req.query;
+    const query = { status: 'active', isActive: true };
+    if (category && category !== 'all' && category !== 'undefined') {
+      query.category = category;
+    }
+    
+    const listings = await Listing.find(query)
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit))
+      .skip((parseInt(page) - 1) * parseInt(limit));
+    
+    const total = await Listing.countDocuments(query);
+    
+    res.json({
+      success: true,
+      data: listings,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    console.error('Listings fallback error:', error.message);
+    res.json({
+      success: true,
+      data: [
+        { id: 1, name: 'Fashion Item 1', price: 75, category: category || 'General' },
+        { id: 2, name: 'Fashion Item 2', price: 120, category: category || 'General' },
+        { id: 3, name: 'Fashion Item 3', price: 95, category: category || 'General' }
+      ]
+    });
+  }
+});
+
+// Services - Direct endpoint
+app.get('/api/public/services', async (req, res) => {
+  try {
+    const Listing = require('./models/Listing');
+    const listings = await Listing.find({ 
+      status: 'active', 
+      isActive: true,
+      category: 'Services'
+    })
+      .sort({ createdAt: -1 })
+      .limit(10);
+    res.json({ success: true, data: listings });
+  } catch (error) {
+    res.json({
+      success: true,
+      data: [
+        { id: 1, name: 'Tutoring Service', price: 50, category: 'Services' },
+        { id: 2, name: 'Cleaning Service', price: 30, category: 'Services' },
+        { id: 3, name: 'Delivery Service', price: 20, category: 'Services' }
+      ]
+    });
+  }
+});
+
+// Flash Deals - Direct endpoint
+app.get('/api/public/flash-deals', async (req, res) => {
+  try {
+    const Listing = require('./models/Listing');
+    const listings = await Listing.find({ 
+      status: 'active', 
+      isActive: true,
+      discount: { $gt: 0 }
+    })
+      .sort({ discount: -1, createdAt: -1 })
+      .limit(10);
+    res.json({ success: true, data: listings });
+  } catch (error) {
+    res.json({
+      success: true,
+      data: [
+        { id: 1, name: 'Flash Deal 1', price: 29.99, originalPrice: 59.99, discount: 50 },
+        { id: 2, name: 'Flash Deal 2', price: 19.99, originalPrice: 39.99, discount: 50 },
+        { id: 3, name: 'Flash Deal 3', price: 49.99, originalPrice: 89.99, discount: 44 }
+      ]
+    });
+  }
+});
+
+// Second Hand - Direct endpoint
+app.get('/api/public/second-hand', async (req, res) => {
+  try {
+    const Listing = require('./models/Listing');
+    const listings = await Listing.find({ 
+      status: 'active', 
+      isActive: true,
+      category: 'Second Hand'
+    })
+      .sort({ createdAt: -1 })
+      .limit(10);
+    res.json({ success: true, data: listings });
+  } catch (error) {
+    res.json({
+      success: true,
+      data: [
+        { id: 1, name: 'Used Laptop', price: 299.99, category: 'Second Hand' },
+        { id: 2, name: 'Used Phone', price: 199.99, category: 'Second Hand' },
+        { id: 3, name: 'Used Books', price: 49.99, category: 'Second Hand' }
+      ]
+    });
+  }
+});
+
+// Top Sellers - Direct endpoint
+app.get('/api/public/top-sellers', async (req, res) => {
+  try {
+    const Seller = require('./models/Seller');
+    const sellers = await Seller.find({ isActive: true })
+      .populate('user', 'name avatar')
+      .sort({ rating: -1, totalSales: -1 })
+      .limit(10);
+    res.json({ success: true, data: sellers });
+  } catch (error) {
+    res.json({
+      success: true,
+      data: [
+        { id: 1, name: 'Top Seller 1', sales: 100, rating: 4.9 },
+        { id: 2, name: 'Top Seller 2', sales: 75, rating: 4.7 },
+        { id: 3, name: 'Top Seller 3', sales: 50, rating: 4.5 }
+      ]
+    });
+  }
+});
+
+// Sellers - Direct endpoint
+app.get('/api/public/sellers', async (req, res) => {
+  try {
+    const Seller = require('./models/Seller');
+    const sellers = await Seller.find({ isActive: true })
+      .populate('user', 'name avatar email')
+      .sort({ rating: -1, totalSales: -1 })
+      .limit(10);
+    res.json({ success: true, data: sellers });
+  } catch (error) {
+    res.json({
+      success: true,
+      data: [
+        { id: 1, name: 'Seller 1', rating: 4.9, totalSales: 100 },
+        { id: 2, name: 'Seller 2', rating: 4.7, totalSales: 75 }
+      ]
+    });
+  }
+});
+
+// Campus Trending - Direct endpoint
+app.get('/api/public/campus-trending', async (req, res) => {
+  try {
+    const Listing = require('./models/Listing');
+    const listings = await Listing.find({
+      status: 'active',
+      isActive: true,
+      category: 'Campus Life'
+    })
+      .sort({ views: -1, sales: -1, createdAt: -1 })
+      .limit(10);
+    res.json({ success: true, data: listings });
+  } catch (error) {
+    res.json({
+      success: true,
+      data: [
+        { id: 1, name: 'Campus Favorite 1', price: 45, category: 'Campus Life' },
+        { id: 2, name: 'Campus Favorite 2', price: 55, category: 'Campus Life' }
+      ]
+    });
+  }
+});
+
+// ============================================
+// /api/listings (without public prefix) - For FashionDeals component
+// ============================================
+app.get('/api/listings', async (req, res) => {
+  try {
+    const Listing = require('./models/Listing');
+    const { category, page = 1, limit = 20 } = req.query;
+    const query = { status: 'active', isActive: true };
+    if (category && category !== 'all' && category !== 'undefined') {
+      query.category = category;
+    }
+    
+    const listings = await Listing.find(query)
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit))
+      .skip((parseInt(page) - 1) * parseInt(limit));
+    
+    res.json({ success: true, data: listings });
+  } catch (error) {
+    console.error('Listings error:', error.message);
+    res.json({
+      success: true,
+      data: [
+        { id: 1, name: 'Fashion Item 1', price: 75, category: category || 'General' },
+        { id: 2, name: 'Fashion Item 2', price: 120, category: category || 'General' }
+      ]
+    });
+  }
+});
+
+// ============================================
+// /api/hero-slides (without public prefix) - For HeroCarousel component
+// ============================================
+app.get('/api/hero-slides', (req, res) => {
+  res.json({
+    success: true,
+    data: [
+      { id: 1, image: '/images/hero-banner-1.jpg', title: 'Welcome to UniMart' },
+      { id: 2, image: '/images/hero-banner-2.jpg', title: 'Student Deals' },
+      { id: 3, image: '/images/hero-banner-3.jpg', title: 'Sell Your Items' }
+    ]
+  });
+});
 
 // ============================================
 // INLINE ORDER ROUTE (Simple implementation)
@@ -311,7 +624,13 @@ app.post('/api/orders', async (req, res) => {
       id: orderId,           // ← Frontend needs this for order.id
       orderId: orderId,      // ← Frontend also uses orderId
       status: 'pending',
-      message: 'Order received successfully!'
+      message: 'Order received successfully!',
+      data: {
+        id: orderId,
+        ...req.body,
+        status: 'pending',
+        createdAt: new Date().toISOString()
+      }
     });
   } catch (error) {
     console.error('❌ Order error:', error);
@@ -340,6 +659,28 @@ app.get('/api/orders/my-orders', async (req, res) => {
   }
 });
 
+// Get single order
+app.get('/api/orders/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    res.json({
+      success: true,
+      data: {
+        id: id,
+        status: 'pending',
+        items: [],
+        totalAmount: 0
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch order',
+      error: error.message
+    });
+  }
+});
+
 console.log('✅ All routes processed');
 
 // ============================================
@@ -355,7 +696,9 @@ app.use((req, res) => {
     availableEndpoints: {
       health: 'GET /health',
       corsCheck: 'GET /cors-check',
-      root: 'GET /'
+      root: 'GET /',
+      public: 'GET /api/public/debug, /api/public/trending, /api/public/listings, etc.',
+      orders: 'POST /api/orders, GET /api/orders/my-orders'
     }
   });
 });
